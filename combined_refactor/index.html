@@ -1,0 +1,1724 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloudflare IP Data (Combined)</title>
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+            --radius: 16px;
+            --shadow: 0 20px 25px -5px rgba(0, 0, 0, .05), 0 8px 10px -6px rgba(0, 0, 0, .05), 0 0 0 1px rgba(0, 0, 0, .02);
+        }
+
+        body.dark-theme {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+
+        .no-transition,
+        .no-transition * {
+            transition: none !important;
+        }
+
+        /* 修改点：新增复制成功/失败提示的样式及动画 */
+        .copy-hint {
+            position: fixed;
+            z-index: 9999;
+            pointer-events: none;
+            font-size: 13px;
+            font-weight: bold;
+            animation: copyFadeUp 0.8s ease-out forwards;
+        }
+        @keyframes copyFadeUp {
+            0% { opacity: 0; transform: translateY(0); }
+            20% { opacity: 1; transform: translateY(-10px); }
+            80% { opacity: 1; transform: translateY(-15px); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #f6f8fb 0%, #e5e9f0 100%);
+            color: var(--text-main);
+        }
+
+        .container {
+            position: relative;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: var(--shadow);
+        }
+
+        .settings-toggle {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            z-index: 100;
+            line-height: 1;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .settings-toggle:hover {
+            transform: scale(1.1);
+            border-color: var(--primary-color);
+        }
+
+        .settings-menu {
+            position: absolute;
+            right: 20px;
+            top: 68px;
+            width: 240px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, .12);
+            padding: 12px;
+            z-index: 30;
+        }
+
+        .settings-menu.hidden {
+            display: none;
+        }
+
+        .settings-title {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .theme-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .menu-btn {
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-main);
+            border-radius: 8px;
+            padding: 8px 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .menu-btn.active {
+            border-color: var(--primary-color);
+            color: #fff;
+            background: linear-gradient(135deg, var(--primary-color) 0%, #2563eb 100%);
+        }
+
+        .menu-btn:hover {
+            border-color: var(--primary-color);
+        }
+
+        .danger-btn {
+            width: 100%;
+            border: 1px solid #fca5a5;
+            background: #fff1f2;
+            color: #b91c1c;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .danger-btn:hover {
+            border-color: #ef4444;
+            background: #ffe4e6;
+        }
+
+        body.dark-theme .danger-btn {
+            background: #3f1f2b;
+            color: #fecdd3;
+            border-color: #be123c;
+        }
+
+        h1 {
+            margin: 0 0 16px 0;
+            text-align: center;
+            font-size: 1.75rem;
+        }
+
+        .status-bar {
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            border-left: 4px solid var(--success-color);
+            border-radius: 8px;
+            background: linear-gradient(to right, #ecfdf5, #f0fdf4);
+            color: #065f46;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .status-bar.error {
+            border-left-color: var(--error-color);
+            background: linear-gradient(to right, #fef2f2, #fee2e2);
+            color: #991b1b;
+        }
+
+        .mode-switch {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 16px;
+            cursor: pointer;
+            background: var(--bg-color);
+            color: var(--text-main);
+            font-weight: 700;
+            transition: all .2s ease;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, var(--primary-color), #2563eb);
+            color: #fff;
+            border-color: var(--primary-hover);
+        }
+
+        .section-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 16px;
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .settings-toggle {
+                right: 12px;
+                top: 12px;
+            }
+
+            .settings-menu {
+                right: 12px;
+                top: 58px;
+                width: calc(100vw - 24px);
+                max-width: 260px;
+            }
+        }
+
+        .controls {
+            background: linear-gradient(135deg, var(--card-bg), var(--bg-color));
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 15px;
+        }
+
+        .controls .control-title {
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        #officialControls,
+        #nsbControls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .controls button {
+            display: block;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .checkbox-inline {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 44px;
+        }
+
+        .checkbox-inline label {
+            margin-bottom: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-main);
+            font-size: 14px;
+            min-height: 44px;
+        }
+
+        .option-item {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--card-bg);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            min-height: 52px;
+            box-sizing: border-box;
+            height: 100%;
+        }
+
+        .option-item .label {
+            color: var(--text-secondary);
+            font-size: 13px;
+            width: 120px;
+            flex-shrink: 0;
+        }
+
+        .option-item input,
+        .option-item select {
+            flex: 1;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        .option-item .field-with-action {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .mini-action-btn {
+            width: 34px;
+            height: 34px;
+            flex-shrink: 0;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-color);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            padding: 0;
+        }
+
+        .controls .mini-action-btn {
+            width: 34px !important;
+            margin-top: 0 !important;
+        }
+
+        .mini-action-btn:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .option-item.full-width {
+            grid-column: 1 / -1;
+        }
+
+        input,
+        select {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--bg-color);
+            color: var(--text-main);
+            padding: 12px;
+            font-size: 14px;
+        }
+
+        select {
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 16px;
+            padding-right: 36px;
+        }
+
+        .control-title {
+            grid-column: 1 / -1;
+            font-weight: 700;
+            color: var(--text-main);
+            margin: 4px 0 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-hint {
+            color: var(--text-secondary);
+            margin-top: 6px;
+            font-size: 12px;
+        }
+
+        .file-field {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-start;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        #btnStart {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            color: #fff;
+            background: linear-gradient(135deg, var(--primary-color), #2563eb);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, .3);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 8px;
+            box-sizing: border-box;
+        }
+
+        .btn-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, .45);
+            border-top-color: rgba(255, 255, 255, .95);
+            border-radius: 50%;
+            display: inline-block;
+            animation: spin 0.9s linear infinite;
+            vertical-align: text-bottom;
+        }
+
+        .tabs {
+            display: flex;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            border-radius: 12px;
+            padding: 4px;
+            gap: 4px;
+            margin-bottom: 14px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 12px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+
+        .tab.active {
+            color: var(--primary-color);
+            background: rgba(59, 130, 246, .1);
+        }
+
+        .tab[style*='display: none'] {
+            display: none !important;
+        }
+
+        .tab-content {
+            display: none;
+            animation: fade .25s;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fade {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .progress-container {
+            display: none;
+            width: 100%;
+            background: var(--border-color);
+            border-radius: 12px;
+            height: 24px;
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent), linear-gradient(to right, var(--primary-color), #60a5fa);
+            background-size: 20px 20px, 100% 100%;
+            animation: stripe 1s linear infinite;
+            color: #fff;
+            text-align: center;
+            font-size: 12px;
+            line-height: 24px;
+            font-weight: 700;
+        }
+
+        @keyframes stripe {
+            from {
+                background-position: 0 0, 0 0;
+            }
+
+            to {
+                background-position: 20px 20px, 0 0;
+            }
+        }
+
+        .scroll-table {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 700px;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        th {
+            background: var(--bg-color);
+            color: var(--text-secondary);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        tr:hover {
+            background: color-mix(in srgb, var(--bg-color), var(--primary-color) 6%);
+        }
+
+        .badge {
+            background: linear-gradient(135deg, var(--primary-color), #60a5fa);
+            color: #fff;
+            border-radius: 20px;
+            padding: 3px 10px;
+            font-size: 12px;
+        }
+
+        .action-btn {
+            padding: 7px 11px;
+            border: 0;
+            border-radius: 6px;
+            background: linear-gradient(135deg, var(--warning-color), #fbbf24);
+            color: #fff;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .speed-btn {
+            min-width: 78px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .speed-result {
+            min-width: 88px;
+            display: inline-block;
+            text-align: left;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .export-btn {
+            background: linear-gradient(135deg, var(--success-color), #059669) !important;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2) !important;
+            border: none;
+        }
+
+        .export-btn:hover {
+            box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4) !important;
+        }
+
+        .action-btn.selected {
+            background: linear-gradient(135deg, #10b981, #34d399);
+        }
+
+        .action-btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .copy-ip {
+            color: var(--primary-color);
+            cursor: pointer;
+            border-bottom: 1px dashed var(--primary-color);
+        }
+
+        .log-box {
+            background: #0f172a;
+            color: #34d399;
+            border-radius: 12px;
+            padding: 14px;
+            height: 180px;
+            overflow-y: auto;
+            font-family: Menlo, Monaco, "Courier New", monospace;
+            border: 1px solid #1e293b;
+            font-size: 13px;
+            margin-top: 16px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 768px) {
+
+            .controls,
+            .container {
+                padding: 12px;
+            }
+
+            body {
+                padding: 10px;
+            }
+
+            #officialControls,
+            #nsbControls {
+                grid-template-columns: 1fr;
+            }
+
+            .option-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+                height: auto;
+                padding: 12px;
+            }
+
+            .option-item .label {
+                width: 100%;
+                margin-bottom: 2px;
+            }
+
+            .option-item input,
+            .option-item select,
+            .option-item .field-with-action {
+                width: 100%;
+            }
+        }
+
+        body {
+            user-select: none;
+            -webkit-user-select: none;
+            caret-color: transparent;
+        }
+
+        input,
+        textarea {
+            user-select: text;
+            -webkit-user-select: text;
+            caret-color: auto;
+        }
+
+        /* 修改点1：表格文字选择功能（官方+非标模式） */
+        /* 原因：原 body 禁用了 user-select: none，现在仅让表格（含官方两个表格和非标表格）可光标选中复制 */
+        /* 方案：新增规则覆盖 body 设置，仅影响表格内容，其他地方完全不变 */
+        table th,
+        table td,
+        .copy-ip {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            caret-color: auto;
+        }
+
+        *:focus {
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Cloudflare IP Data</h1>
+        <button class="settings-toggle" id="settingsToggle" onclick="toggleSettingsMenu(event)" title="设置">
+            <span id="themeIcon">⚙️</span>
+        </button>
+        <div id="settingsMenu" class="settings-menu hidden">
+            <div class="settings-title">颜色模式</div>
+            <div class="theme-options">
+                <button class="menu-btn" id="theme-light" onclick="setTheme('light')">浅色</button>
+                <button class="menu-btn" id="theme-dark" onclick="setTheme('dark')">深色</button>
+                <button class="menu-btn" id="theme-auto" onclick="setTheme('auto')">自动</button>
+            </div>
+            <div class="settings-title">本地缓存</div>
+            <button class="danger-btn" onclick="resetAllConfig()">恢复全部默认配置</button>
+        </div>
+
+        <div class="status-bar" id="status">正在连接服务器...</div>
+
+        <div class="mode-switch">
+            <button class="mode-btn active" id="btnOfficial" onclick="switchMode('official')">☁️ 官方优选</button>
+            <button class="mode-btn" id="btnNSB" onclick="switchMode('nsb')">📂 非标优选</button>
+        </div>
+
+        <div class="section-box controls">
+            <div id="officialControls">
+                <div class="control-title">
+                    <span>官方参数</span>
+                    <span style="font-size:12px;color:var(--text-secondary);">端口可选</span>
+                </div>
+                <div class="option-item">
+                    <span class="label">🌐 IP 类型</span>
+                    <select id="ipType">
+                        <option value="4">IPv4</option>
+                        <option value="6">IPv6</option>
+                    </select>
+                </div>
+                <div class="option-item">
+                    <span class="label">🎯 端口</span>
+                    <select id="testPort">
+                        <optgroup label="HTTPS (默认)">
+                            <option value="443" selected>443</option>
+                            <option value="2053">2053</option>
+                            <option value="2083">2083</option>
+                            <option value="2087">2087</option>
+                            <option value="2096">2096</option>
+                            <option value="8443">8443</option>
+                        </optgroup>
+                        <optgroup label="HTTP">
+                            <option value="80">80</option>
+                            <option value="8080">8080</option>
+                            <option value="8880">8880</option>
+                            <option value="2052">2052</option>
+                            <option value="2082">2082</option>
+                            <option value="2086">2086</option>
+                            <option value="2095">2095</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="option-item">
+                    <span class="label">🚀 并发数</span>
+                    <input id="scanThreads" type="number" value="100" placeholder="默认 100">
+                </div>
+                <div class="option-item">
+                    <span class="label">⏱️ 延迟阈值 (ms)</span>
+                    <input id="testDelay" type="number" value="500" placeholder="默认 500">
+                </div>
+                <div class="option-item full-width">
+                    <span class="label">🔗 测速网址</span>
+                    <div class="field-with-action">
+                        <input id="speedTestUrl" type="text" value="speed.cloudflare.com/__down?bytes=99999999"
+                            placeholder="例如 speed.cloudflare.com/__down?bytes=99999999">
+                        <button class="mini-action-btn" title="恢复默认测速网站"
+                            onclick="resetDefaultSpeedUrl('speedTestUrl')">↺</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="nsbControls" class="hidden">
+                <div class="control-title">
+                    <span>非标参数</span>
+                    <span style="font-size:12px;color:var(--text-secondary);">请上传txt文件（每行一个IP，格式：IP+空格+端口，示例1.2.3.4
+                        443）</span>
+                </div>
+                <div class="option-item full-width">
+                    <span class="label">📄 选择 IP 文件</span>
+                    <input id="ipFileInput" type="file" accept=".txt,.csv,text/plain">
+                </div>
+                <div class="option-item">
+                    <span class="label">🚀 并发数</span>
+                    <input id="nsbThreads" type="number" value="100" placeholder="默认 100">
+                </div>
+                <div class="option-item">
+                    <span class="label">⏱️ 延迟阈值 (ms)</span>
+                    <input id="nsbDelay" type="number" value="0" placeholder="默认 0">
+                </div>
+                <div class="option-item">
+                    <span class="label">🧪 开启测速</span>
+                    <select id="enableSpeedTest" onchange="updateNSBSpeedControls()">
+                        <option value="on" selected>开启</option>
+                        <option value="off">关闭</option>
+                    </select>
+                </div>
+                <div class="option-item">
+                    <span class="label">⚡ 测速线程</span>
+                    <input id="nsbSpeedTest" type="number" value="5" placeholder="默认 5">
+                </div>
+                <div class="option-item">
+                    <span class="label">🔗 TLS 模式</span>
+                    <select id="nsbTls">
+                        <option value="on" selected>开启</option>
+                        <option value="off">关闭</option>
+                    </select>
+                </div>
+                <div class="option-item">
+                    <span class="label">🛠️ 输出文件名</span>
+                    <input id="nsbOutFile" type="text" value="ip.csv" placeholder="ip.csv">
+                </div>
+                <div class="option-item full-width">
+                    <span class="label">🔗 测速网址</span>
+                    <div class="field-with-action">
+                        <input id="nsbSpeedUrl" type="text" value="speed.cloudflare.com/__down?bytes=99999999"
+                            placeholder="speed.cloudflare.com/__down?bytes=99999999">
+                        <button class="mini-action-btn" title="恢复默认测速网站"
+                            onclick="resetDefaultSpeedUrl('nsbSpeedUrl')">↺</button>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btnStart" class="btn" onclick="startTask()"><span id="btnStartSpinner"
+                    class="hidden"></span><span id="btnStartLabel">✨ 开始扫描与测试</span></button>
+        </div>
+
+        <div class="progress-container" id="progressBox">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('scan')">📡 扫描结果</div>
+            <div class="tab" onclick="switchTab('test')">📊 详细测试</div>
+        </div>
+
+        <div id="scan" class="tab-content active">
+            <div class="section-box" id="dcSection" style="display:none;">
+                <h3>
+                    数据中心汇总 <span class="badge" id="dcCount">0</span>
+                    <span id="currentTestDC"
+                        style="margin-left:10px;font-size:12px;color:var(--text-secondary);"></span>
+                </h3>
+                <div class="scroll-table">
+                    <table id="dcTable">
+                        <thead>
+                            <tr>
+                                <th>数据中心</th>
+                                <th>城市</th>
+                                <th>IP数量</th>
+                                <th>最低延迟</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="section-box">
+                <h3 style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>扫描结果 <span class="badge" id="scanCount">0</span></span>
+                    <button class="action-btn export-btn" onclick="exportScanCSV()">📥 导出 CSV</button>
+                </h3>
+                <div class="scroll-table" style="max-height:520px;">
+                    <table id="scanTable">
+                        <thead>
+                            <tr>
+                                <th>IP</th>
+                                <th>数据中心</th>
+                                <th>地区</th>
+                                <th>城市</th>
+                                <th>延迟</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="test" class="tab-content">
+            <div class="section-box">
+                <h3 style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>详细测试结果 <span class="badge" id="testCount">0</span></span>
+                    <button class="action-btn export-btn" onclick="exportTestCSV()">📥 导出 CSV</button>
+                </h3>
+                <div class="scroll-table" style="max-height:520px;">
+                    <table id="testTable">
+                        <thead>
+                            <tr>
+                                <th>IP 地址</th>
+                                <th>丢包率</th>
+                                <th>最小延迟</th>
+                                <th>最大延迟</th>
+                                <th>平均延迟</th>
+                                <th>测速</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="log-box" id="logBox">
+            <div>[系统] 等待操作...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let defaultSpeedTestUrl = "speed.cloudflare.com/__down?bytes=99999999";
+        let isTaskRunning = false;
+        let scanData = [];
+        let testData = [];
+        let dcList = [];
+        let testedDCs = new Set();
+        let currentTestingDC = '';
+        let scanResultsCount = 0;
+        let testResultsCount = 0;
+        let currentMode = 'official';
+        let uploadedFileName = '';
+        let uploadedFileContent = '';
+        let nsbHeaders = [];
+        let nsbRows = [];
+        let currentSpeedTestingIP = '';
+
+        const statusEl = document.getElementById('status');
+        const progressBox = document.getElementById('progressBox');
+        const progressBar = document.getElementById('progressBar');
+
+        const modeOfficial = document.getElementById('btnOfficial');
+        const modeNSB = document.getElementById('btnNSB');
+        const officialControls = document.getElementById('officialControls');
+        const nsbControls = document.getElementById('nsbControls');
+        const fileInput = document.getElementById('ipFileInput');
+
+        document.getElementById('ipFileInput').addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            uploadedFileName = file.name || 'upload.txt';
+            const reader = new FileReader();
+            reader.onload = () => {
+                uploadedFileContent = String(reader.result || '');
+                log(`已选择文件: ${uploadedFileName}`);
+            };
+            reader.onerror = () => log('读取文件失败');
+            reader.readAsText(file);
+        });
+
+        function applyTheme(theme) {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+            if (theme === 'auto') {
+                document.body.classList.remove('dark-theme');
+                if (prefersDark) {
+                    document.body.classList.add('dark-theme');
+                }
+                localStorage.setItem('cfdata-theme', 'auto');
+                const autoBtn = document.getElementById('theme-auto');
+                const lightBtn = document.getElementById('theme-light');
+                const darkBtn = document.getElementById('theme-dark');
+                if (autoBtn) autoBtn.classList.add('active');
+                if (lightBtn) lightBtn.classList.remove('active');
+                if (darkBtn) darkBtn.classList.remove('active');
+                return;
+            }
+
+            if (theme === 'dark') {
+                document.body.classList.add('dark-theme');
+            } else {
+                document.body.classList.remove('dark-theme');
+            }
+
+            localStorage.setItem('cfdata-theme', theme);
+            const autoBtn = document.getElementById('theme-auto');
+            const lightBtn = document.getElementById('theme-light');
+            const darkBtn = document.getElementById('theme-dark');
+            if (autoBtn) autoBtn.classList.remove('active');
+            if (lightBtn) lightBtn.classList.toggle('active', theme === 'light');
+            if (darkBtn) darkBtn.classList.toggle('active', theme === 'dark');
+        }
+
+        function setTheme(theme) {
+            applyTheme(theme);
+        }
+
+        function toggleSettingsMenu(event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            const menu = document.getElementById('settingsMenu');
+            menu.classList.toggle('hidden');
+            if (!menu.classList.contains('hidden')) {
+                menu.classList.add('no-transition');
+                setTimeout(() => menu.classList.remove('no-transition'), 0);
+            }
+        }
+
+        document.addEventListener('click', (event) => {
+            const menu = document.getElementById('settingsMenu');
+            const btn = document.getElementById('settingsToggle');
+            if (!menu || !btn) return;
+            if (!menu.contains(event.target) && !btn.contains(event.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        function initThemeFromStorage() {
+            const saved = localStorage.getItem('cfdata-theme') || 'auto';
+            applyTheme(saved);
+        }
+
+        function initializeUI() {
+            updateNSBSpeedControls();
+        }
+
+        function updateNSBSpeedControls() {
+            const enableSpeedTest = document.getElementById('enableSpeedTest');
+            const speedTestInput = document.getElementById('nsbSpeedTest');
+            if (!enableSpeedTest || !speedTestInput) return;
+
+            const speedEnabled = String(enableSpeedTest.value || 'on').toLowerCase() === 'on';
+            if (speedEnabled) {
+                speedTestInput.disabled = false;
+                if (String(speedTestInput.value).trim() === '0') {
+                    speedTestInput.value = '5';
+                }
+                return;
+            }
+
+            speedTestInput.value = '0';
+            speedTestInput.disabled = true;
+        }
+
+        function resetDefaultSpeedUrl(targetId = 'speedTestUrl') {
+            const input = document.getElementById(targetId);
+            if (!input) return;
+            input.value = defaultSpeedTestUrl;
+        }
+
+        function resetAllConfig() {
+            if (!window.confirm('这会清掉本地缓存文件：ips-v4.txt、ips-v6.txt、locations.json。要继续吗？')) {
+                return;
+            }
+            ws.send(JSON.stringify({ type: 'reset_all_config' }));
+            const menu = document.getElementById('settingsMenu');
+            if (menu) menu.classList.add('hidden');
+            document.body.classList.add('no-transition');
+            setTimeout(() => document.body.classList.remove('no-transition'), 500);
+        }
+
+        function connect() {
+            ws = new WebSocket(`ws://${window.location.host}/ws`);
+            ws.onopen = () => {
+                updateStatus('已连接服务器', true);
+                log('已连接服务器');
+                initThemeFromStorage();
+            };
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+            ws.onclose = () => {
+                updateStatus('连接断开，3秒后重连...', false);
+                log('连接断开，正在重连...');
+                setTimeout(connect, 3000);
+            };
+        }
+
+        function updateStatus(text, connected) {
+            statusEl.textContent = text;
+            statusEl.classList.toggle('error', !connected);
+        }
+
+        function log(text) {
+            const box = document.getElementById('logBox');
+            box.innerHTML += `<div><span style="color:#94a3b8;opacity:.75;">[${new Date().toLocaleTimeString()}]</span> ${text}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            modeOfficial.classList.toggle('active', mode === 'official');
+            modeNSB.classList.toggle('active', mode === 'nsb');
+
+            if (mode === 'official') {
+                officialControls.classList.remove('hidden');
+                nsbControls.classList.add('hidden');
+                document.querySelector('.tabs .tab:last-child').style.display = 'block';
+                document.getElementById('dcSection').style.display = dcList.length ? 'block' : 'none';
+                document.getElementById('btnStartLabel').textContent = '✨ 开始扫描与测试';
+                renderScanHeaders('official');
+                if (!isTaskRunning) {
+                    switchTab('scan');
+                }
+            } else {
+                officialControls.classList.add('hidden');
+                nsbControls.classList.remove('hidden');
+                const testTab = document.querySelectorAll('.tab')[1];
+                testTab.style.display = 'none';
+                if (document.querySelector('.tab.active') !== document.querySelector('.tabs .tab:first-child')) {
+                    switchTab('scan');
+                }
+                document.getElementById('dcSection').style.display = 'none';
+                document.getElementById('btnStartLabel').textContent = '✨ 开始扫描与测试';
+                renderScanHeaders('nsb');
+            }
+            resetProgress();
+            log(`切换至：${mode === 'official' ? '官方优选' : '非标优选'}`);
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
+
+            const tabs = document.querySelectorAll('.tab');
+            const first = tabs[0];
+            const second = tabs[1];
+
+            if (tabId === 'scan') {
+                first.classList.add('active');
+            } else {
+                if (second.style.display !== 'none') second.classList.add('active');
+                else first.classList.add('active');
+            }
+            const target = document.getElementById(tabId);
+            if (target) target.classList.add('active');
+
+            if (tabId === 'test' && currentMode === 'nsb') {
+                switchTab('scan');
+            }
+        }
+
+        function updateProgress(current, total, text) {
+            if (!total) {
+                total = 100;
+            }
+            const p = Math.min(Math.max((current / total) * 100, 0), 100);
+            progressBar.style.width = `${Math.round(p)}%`;
+            progressBar.textContent = `${text || ''} ${Math.round(p)}%`;
+        }
+
+        function resetProgress() {
+            progressBar.style.width = '0%';
+            progressBar.style.background = 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent), linear-gradient(to right, var(--primary-color), #60a5fa)';
+            progressBar.style.backgroundSize = '20px 20px, 100% 100%';
+            progressBar.textContent = '0%';
+        }
+
+        function setStartLoading(text, background = 'linear-gradient(135deg, #ef4444, #dc2626)', boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3), inset 0 1px 1px rgba(255,255,255,.2)') {
+            const btn = document.getElementById('btnStart');
+            const lb = document.getElementById('btnStartLabel');
+            const sp = document.getElementById('btnStartSpinner');
+            lb.textContent = text;
+            btn.style.background = background;
+            btn.style.boxShadow = boxShadow;
+            if (sp) sp.classList.remove('hidden');
+            if (sp && sp.classList) {
+                sp.className = 'btn-spinner';
+            }
+            btn.disabled = false;
+        }
+
+        function resetButton(text = '✨ 开始扫描与测试') {
+            const btn = document.getElementById('btnStart');
+            const lb = document.getElementById('btnStartLabel');
+            const sp = document.getElementById('btnStartSpinner');
+            lb.textContent = text;
+            if (sp) sp.classList.add('hidden');
+            btn.style.background = 'linear-gradient(135deg, var(--primary-color), #2563eb)';
+            btn.style.boxShadow = '0 4px 12px rgba(59,130,246,.3), inset 0 1px 1px rgba(255,255,255,0.2)';
+            btn.disabled = false;
+        }
+
+        function renderScanHeaders(mode) {
+            const thead = document.querySelector('#scanTable thead');
+            const tbody = document.querySelector('#scanTable tbody');
+            tbody.innerHTML = '';
+
+            if (mode === 'official') {
+                thead.innerHTML = '<tr><th>IP</th><th>数据中心</th><th>地区</th><th>城市</th><th>延迟</th></tr>';
+            } else {
+                let h = nsbHeaders.length ? nsbHeaders : ['IP', '端口', 'TLS', '数据中心', '源IP位置', '地区', '城市', '网络延迟', '下载速度'];
+                const row = h.map(i => `<th>${i}</th>`).join('');
+                thead.innerHTML = `<tr>${row}</tr>`;
+            }
+        }
+
+        function renderScanRowOfficial(row) {
+            const tbody = document.querySelector('#scanTable tbody');
+            // 修改点：为 copyToClipboard 增加 event 参数，以便定位提示文字
+            const html = `<tr><td><span class="copy-ip" onclick="copyToClipboard('${row.IP}', event)">${row.IP}</span></td><td>${row.DataCenter || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td>${row.LatencyStr || '-'}</td></tr>`;
+            tbody.insertAdjacentHTML('beforeend', html);
+        }
+
+        function renderScanRowsCSV(headers, rows) {
+            const tbody = document.querySelector('#scanTable tbody');
+            tbody.innerHTML = '';
+            renderScanHeaders('nsb');
+
+            // 修改点2：非标模式下IP和端口可点击复制（与官方模式完全一致）
+            // 原因：原非标表格只能看，不能点击复制IP/端口
+            // 方案：识别 'IP' 和 '端口' 列，使用完全相同的 copy-ip 类和 copyToClipboard 函数（动画、提示、log 一致）
+            let ipIndex = headers.indexOf('IP');
+            let portIndex = headers.indexOf('端口');
+
+            rows.forEach((r) => {
+                const tds = headers.map((_, idx) => {
+                    const val = escapeHTML(r[idx] ?? '');
+                    const rawVal = String(r[idx] ?? '');
+                    if (idx === ipIndex && ipIndex !== -1) {
+                        return `<td><span class="copy-ip" onclick="copyToClipboard('${rawVal.replace(/'/g, "\\'")}', event)">${val}</span></td>`;
+                    } else if (idx === portIndex && portIndex !== -1) {
+                        return `<td><span class="copy-ip" onclick="copyToClipboard('${rawVal.replace(/'/g, "\\'")}', event)">${val}</span></td>`;
+                    } else {
+                        return `<td>${val}</td>`;
+                    }
+                }).join('');
+                tbody.insertAdjacentHTML('beforeend', `<tr>${tds}</tr>`);
+            });
+
+            updateBadge('scanCount', rows.length);
+        }
+
+        function addScanResult(row) {
+            scanResultsCount++;
+            updateBadge('scanCount', scanResultsCount);
+            scanData.push(row);
+            renderScanRowOfficial(row);
+        }
+
+        function sortAndRenderScanResults() {
+            scanData.sort((a, b) => parseFloat(a.LatencyStr) - parseFloat(b.LatencyStr));
+            const tbody = document.querySelector('#scanTable tbody');
+            tbody.innerHTML = '';
+            scanData.forEach(renderScanRowOfficial);
+        }
+
+        function updateBadge(id, v) {
+            document.getElementById(id).textContent = v;
+        }
+
+        function showDCSelection(list) {
+            dcList = list || [];
+            const tbody = document.querySelector('#dcTable tbody');
+            tbody.innerHTML = '';
+            dcList.forEach((dc) => {
+                const isTested = testedDCs.has(dc.DataCenter);
+                const isTesting = currentTestingDC === dc.DataCenter;
+                const btn = isTesting ? `<button class="action-btn" disabled>测试中...</button>` : (isTested ? `<button class="action-btn selected" onclick="selectDC('${dc.DataCenter}')">重新测试</button>` : `<button class="action-btn" onclick="selectDC('${dc.DataCenter}')">选择测试</button>`);
+                const tr = `<tr><td><strong>${dc.DataCenter}</strong></td><td>${dc.City}</td><td>${dc.IPCount}</td><td>${dc.MinLatency} ms</td><td>${btn}</td></tr>`;
+                tbody.insertAdjacentHTML('beforeend', tr);
+            });
+            updateBadge('dcCount', dcList.length);
+            document.getElementById('dcSection').style.display = dcList.length ? 'block' : 'none';
+        }
+
+        function selectDC(dc) {
+            if (isTaskRunning && currentTestingDC !== '') return;
+            const port = parseInt(document.getElementById('testPort').value);
+            const delay = parseInt(document.getElementById('testDelay').value) || 500;
+
+            testResultsCount = 0;
+            updateBadge('testCount', 0);
+            testData = [];
+            currentTestingDC = dc;
+            document.querySelector('#testTable tbody').innerHTML = '';
+            document.getElementById('currentTestDC').textContent = `测试中: ${dc}`;
+            setStartLoading('终止测试');
+            isTaskRunning = true;
+            showDCSelection(dcList);
+            ws.send(JSON.stringify({ type: 'start_test', data: { dc, port, delay } }));
+            switchTab('test');
+        }
+
+        function addTestResult(res) {
+            testResultsCount++;
+            updateBadge('testCount', testResultsCount);
+            testData.push(res);
+            // 修改点：为 copyToClipboard 增加 event 参数
+            const row = `<tr><td><span class="copy-ip" onclick="copyToClipboard('${res.IP}', event)">${res.IP}</span></td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}">未测速</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')">测速</button></td></tr>`;
+            document.querySelector('#testTable tbody').insertAdjacentHTML('beforeend', row);
+        }
+
+        function renderAllTestResults() {
+            const tbody = document.querySelector('#testTable tbody');
+            tbody.innerHTML = '';
+            testData.forEach(addTestResult);
+        }
+
+        function onTestComplete() {
+            if (currentTestingDC) testedDCs.add(currentTestingDC);
+            currentTestingDC = '';
+            showDCSelection(dcList);
+            isTaskRunning = false;
+            resetButton('✨ 开始扫描与测试');
+            const status = document.getElementById('currentTestDC');
+            status.textContent = '测试完成';
+        }
+
+        function runSpeedTest(ip) {
+            if (currentSpeedTestingIP && currentSpeedTestingIP !== ip) {
+                log(`已有测速任务进行中: ${currentSpeedTestingIP}`);
+                return;
+            }
+
+            const id = `btn-speed-${ip.replace(/[:.]/g, '_')}`;
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '测速中';
+            }
+            const speedVal = document.getElementById(`speed-val-${ip.replace(/[:.]/g, '_')}`);
+            if (speedVal) speedVal.textContent = '⏳...';
+            currentSpeedTestingIP = ip;
+            const port = parseInt(document.getElementById('testPort').value);
+            const customUrl = document.getElementById('speedTestUrl').value.trim() || defaultSpeedTestUrl;
+            ws.send(JSON.stringify({ type: 'start_speed_test', data: { ip, port, url: customUrl } }));
+        }
+
+        function getLatencyColor(val) {
+            const v = parseFloat(val);
+            if (isNaN(v)) return 'inherit';
+            return v < 100 ? '#10b981' : (v < 200 ? '#f59e0b' : '#ef4444');
+        }
+
+        function updateSpeedResult(data) {
+            const btn = document.getElementById(`btn-speed-${data.ip.replace(/[:.]/g, '_')}`);
+            const val = document.getElementById(`speed-val-${data.ip.replace(/[:.]/g, '_')}`);
+            const item = testData.find((r) => r.IP === data.ip);
+            if (item) item.Speed = data.speed;
+            if (currentSpeedTestingIP === data.ip) {
+                currentSpeedTestingIP = '';
+            }
+            if (val) {
+                val.textContent = data.speed;
+                val.style.color = data.speed.includes('MB/s') ? (parseFloat(data.speed) > 10 ? '#10b981' : '#f59e0b') : '#ef4444';
+            }
+            if (btn) {
+                btn.textContent = '重新测速';
+                btn.disabled = false;
+            }
+        }
+
+        function resetCurrentSpeedButton() {
+            if (!currentSpeedTestingIP) return;
+            const ip = currentSpeedTestingIP;
+            const btn = document.getElementById(`btn-speed-${ip.replace(/[:.]/g, '_')}`);
+            const val = document.getElementById(`speed-val-${ip.replace(/[:.]/g, '_')}`);
+            const item = testData.find((r) => r.IP === ip);
+            if (btn) {
+                btn.textContent = '重新测速';
+                btn.disabled = false;
+            }
+            if (val && val.textContent === '⏳...') {
+                const fallbackSpeed = item && item.Speed ? item.Speed : '未测速';
+                val.textContent = fallbackSpeed;
+                val.style.color = fallbackSpeed.includes('MB/s') ? (parseFloat(fallbackSpeed) > 10 ? '#10b981' : '#f59e0b') : '';
+            }
+            currentSpeedTestingIP = '';
+        }
+
+        // 修改点3：增强 copyToClipboard 函数（解决复制不生效 + 第一次可用后面失效的问题）
+        // 原因：原 navigator.clipboard.writeText 在某些浏览器环境（http、非localhost、重载后、权限变化）会失败，导致复制完全不生效
+        // 方案：保留原有提示动画、颜色、log完全不变，仅增加 fallback（execCommand），优先现代API，失败自动切换传统方法
+        function copyToClipboard(text, event) {
+            const showHint = (msg, color) => {
+                const hint = document.createElement('span');
+                hint.className = 'copy-hint';
+                hint.style.color = color;
+                hint.textContent = msg;
+                // 根据点击位置定位提示文字，偏移 20px 避免遮挡鼠标
+                hint.style.left = (event.clientX - 20) + 'px';
+                hint.style.top = (event.clientY - 20) + 'px';
+                document.body.appendChild(hint);
+                // 动画结束后移除元素
+                setTimeout(() => hint.remove(), 800);
+            };
+
+            // 优先使用现代 Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showHint('复制成功！', '#10b981');
+                    log('已复制: ' + text);
+                }).catch(() => {
+                    // 失败时自动 fallback
+                    fallbackCopy();
+                });
+            } else {
+                // 不支持 Clipboard API 时直接使用 fallback
+                fallbackCopy();
+            }
+
+            // 传统 fallback 方法（兼容性最高）
+            function fallbackCopy() {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-999999px';
+                textarea.style.top = '-999999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        showHint('复制成功！', '#10b981');
+                        log('已复制: ' + text);
+                    } else {
+                        showHint('复制失败！', '#ef4444');
+                        log('复制失败: ' + text);
+                    }
+                } catch (err) {
+                    showHint('复制失败！', '#ef4444');
+                    log('复制失败: ' + text);
+                } finally {
+                    document.body.removeChild(textarea);
+                }
+            }
+        }
+
+        function startTask() {
+            if (isTaskRunning) {
+                if (confirm('确定要终止当前任务吗？')) {
+                    ws.send(JSON.stringify({ type: 'stop_task' }));
+                    setStartLoading('正在停止...');
+                }
+                return;
+            }
+
+            if (currentMode === 'official') {
+                startOfficialTask();
+            } else {
+                startNSBTask();
+            }
+        }
+
+        function startOfficialTask() {
+            const ipType = parseInt(document.getElementById('ipType').value);
+            const threads = parseInt(document.getElementById('scanThreads').value) || 100;
+            const port = parseInt(document.getElementById('testPort').value) || 443;
+            const delay = parseInt(document.getElementById('testDelay').value) || 0;
+
+            isTaskRunning = true;
+            setStartLoading('终止测试');
+            resetProgress();
+            progressBox.style.display = 'block';
+            renderScanHeaders('official');
+            document.querySelector('#scanTable tbody').innerHTML = '';
+            document.querySelector('#dcTable tbody').innerHTML = '';
+            document.getElementById('dcSection').style.display = 'none';
+            document.querySelector('#testTable tbody').innerHTML = '';
+            document.getElementById('currentTestDC').textContent = '';
+
+            scanData = [];
+            testData = [];
+            dcList = [];
+            testedDCs.clear();
+            currentTestingDC = '';
+            scanResultsCount = 0;
+            testResultsCount = 0;
+            updateBadge('scanCount', 0);
+            updateBadge('testCount', 0);
+            updateBadge('dcCount', 0);
+
+            ws.send(JSON.stringify({ type: 'start_task', data: { ipType, threads, port, delay } }));
+            switchTab('scan');
+        }
+
+        function startNSBTask() {
+            if (!uploadedFileContent.trim()) {
+                alert('请先上传IP文件，格式：ip 端口（空格分隔）');
+                return;
+            }
+
+            const maxThreads = parseInt(document.getElementById('nsbThreads').value) || 100;
+            const speedEnabled = String(document.getElementById('enableSpeedTest').value || 'on').toLowerCase() === 'on';
+            const speedTestInput = parseInt(document.getElementById('nsbSpeedTest').value) || 0;
+            const speedURL = document.getElementById('nsbSpeedUrl').value.trim() || defaultSpeedTestUrl;
+            const outFile = document.getElementById('nsbOutFile').value.trim() || 'ip.csv';
+            const speedTest = speedEnabled ? speedTestInput : 0;
+            const tlsMode = String(document.getElementById('nsbTls').value || 'on').toLowerCase();
+            const enableTLS = tlsMode !== 'off';
+            const delay = parseInt(document.getElementById('nsbDelay').value) || 0;
+
+            if (isNaN(speedTestInput) || speedTestInput < 0) {
+                alert('测速线程必须为非负整数');
+                return;
+            }
+
+            isTaskRunning = true;
+            setStartLoading('终止测试', 'linear-gradient(135deg, var(--error-color), #dc2626)', '0 4px 12px rgba(239, 68, 68, 0.3), inset 0 1px 1px rgba(255,255,255,0.2)');
+            renderScanHeaders('nsb');
+            resetProgress();
+            progressBox.style.display = 'block';
+            document.querySelector('#scanTable tbody').innerHTML = '';
+            document.getElementById('dcSection').style.display = 'none';
+            document.querySelector('#testTable tbody').innerHTML = '';
+
+            nsbHeaders = [];
+            nsbRows = [];
+            updateBadge('scanCount', 0);
+
+            ws.send(JSON.stringify({
+                type: 'start_nsb_task',
+                data: {
+                    fileName: uploadedFileName,
+                    fileContent: uploadedFileContent,
+                    outFile,
+                    maxThreads,
+                    speedTest,
+                    speedURL,
+                    enableTLS,
+                    delay,
+                }
+            }));
+        }
+
+        function escapeHTML(v) {
+            return String(v)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function exportScanCSV() {
+            if (currentMode === 'official') {
+                if (scanData.length === 0) return alert('暂无可导出结果');
+                let csv = 'IP,数据中心,地区,城市,延迟\n';
+                scanData.forEach((r) => {
+                    csv += `${r.IP},${r.DataCenter},${r.Region},${r.City},${r.LatencyStr}\n`;
+                });
+                downloadCSV(csv, 'Cloudflare_Scan_Results');
+                return;
+            }
+
+            if (!nsbRows.length) return alert('暂无可导出结果');
+            let csv = nsbHeaders.join(',') + '\n';
+            nsbRows.forEach((r) => {
+                csv += r.map((c) => `"${String(c ?? '').replaceAll('"', '""')}"`).join(',') + '\n';
+            });
+            downloadCSV(csv, 'Cloudflare_NSB_Results');
+        }
+
+        function exportTestCSV() {
+            if (!testData.length) return alert('暂无可导出结果');
+            let csv = 'IP,丢包率,最小延迟,最大延迟,平均延迟,下载速度\n';
+            testData.forEach((r) => {
+                csv += `${r.IP},${(r.LossRate * 100).toFixed(0)}%,${(r.MinLatency / 1_000_000).toFixed(0)} ms,${(r.MaxLatency / 1_000_000).toFixed(0)} ms,${(r.AvgLatency / 1_000_000).toFixed(0)} ms,${r.Speed || '未测速'}\n`;
+            });
+            downloadCSV(csv, 'Cloudflare_SpeedTest_Results');
+        }
+
+        function downloadCSV(csvContent, nameBase) {
+            const timestamp = new Date().toISOString().replace(/[-:T]/g, '').split('.')[0];
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${nameBase}_${timestamp}.csv`;
+            link.click();
+        }
+
+        function handleMessage(msg) {
+            switch (msg.type) {
+                case 'init_config':
+                    defaultSpeedTestUrl = msg.data.speedTestURL || defaultSpeedTestUrl;
+                    document.getElementById('speedTestUrl').value = defaultSpeedTestUrl;
+                    document.getElementById('nsbSpeedUrl').value = defaultSpeedTestUrl;
+                    break;
+                case 'scan_progress':
+                    updateProgress(msg.data.current || 0, msg.data.total || 0, '扫描中');
+                    break;
+                case 'scan_result':
+                    if (currentMode === 'official') addScanResult(msg.data);
+                    break;
+                case 'scan_complete_wait_dc':
+                    isTaskRunning = false;
+                    if (currentMode === 'official') {
+                        sortAndRenderScanResults();
+                        showDCSelection(msg.data);
+                        resetButton('✨ 重新开始扫描');
+                        updateProgress(msg.data.length ? 100 : 0, 100, '扫描完成，选择数据中心');
+                    }
+                    break;
+                case 'test_progress':
+                    if (currentMode === 'official') {
+                        updateProgress(msg.data.current || 0, msg.data.total || 0, '测试中');
+                    }
+                    break;
+                case 'test_result':
+                    if (currentMode === 'official') addTestResult(msg.data);
+                    break;
+                case 'test_complete':
+                    if (currentMode === 'official') {
+                        testData = msg.data;
+                        renderAllTestResults();
+                        onTestComplete();
+                        resetButton('✨ 开始扫描与测试');
+                        updateProgress(msg.data.length, msg.data.length, '测试完成');
+                    }
+                    break;
+                case 'speed_test_result':
+                    updateSpeedResult(msg.data);
+                    break;
+
+                case 'nsb_progress':
+                    if (currentMode === 'nsb') {
+                        const p = msg.data || {};
+                        const percent = parseFloat(p.percent || 0);
+                        const txt = p.text || '处理中';
+                        updateProgress(p.current || 0, p.total || 1, `${txt}`);
+                        progressBar.textContent = `${txt} ${p.current || 0}/${p.total || 0} (${percent.toFixed(2)}%)`;
+                    }
+                    break;
+                case 'nsb_csv_complete':
+                    isTaskRunning = false;
+                    nsbHeaders = msg.data.headers || [];
+                    nsbRows = msg.data.rows || [];
+                    renderScanRowsCSV(nsbHeaders, nsbRows);
+                    updateProgress(nsbRows.length, Math.max(nsbRows.length, 1), '完成');
+                    progressBar.style.background = 'linear-gradient(to right, #10b981, #34d399)';
+                    // 修改点4：修复非标模式完成后进度条绿色闪烁问题
+                    // 原因：虽然背景已改为绿色，但 animation: stripe 1s linear infinite 仍在生效，导致条纹持续闪烁、前进、消失重复
+                    // 方案：立即停止动画（animation: none），其他代码完全不变
+                    progressBar.style.animation = 'none';
+                    resetButton('✨ 开始扫描与测试');
+                    log(`非标优选完成，已生成: ${msg.data.file}`);
+                    break;
+
+                case 'task_stopped':
+                    isTaskRunning = false;
+                    resetButton('✨ 开始扫描与测试');
+                    progressBar.style.background = 'var(--warning-color)';
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '已手动终止';
+                    log('任务已手动终止');
+                    break;
+
+                case 'error':
+                    if (currentSpeedTestingIP) {
+                        resetCurrentSpeedButton();
+                    }
+                    isTaskRunning = false;
+                    resetButton('✨ 开始扫描与测试');
+                    progressBar.style.background = 'var(--error-color)';
+                    progressBar.style.width = '100%';
+                    if (msg.data && (msg.data.toLowerCase().includes('cancel') || msg.data.toLowerCase().includes('stop'))) {
+                        progressBar.textContent = '已手动终止';
+                        progressBar.style.background = 'var(--warning-color)';
+                    } else {
+                        progressBar.textContent = '任务失败';
+                    }
+                    log('错误: ' + msg.data);
+                    break;
+
+                case 'reset_config_result':
+                    handleResetConfigResult(msg.data);
+                    break;
+                case 'log':
+                    log(msg.data);
+                    break;
+                case 'task_complete':
+                    isTaskRunning = false;
+                    resetButton('✨ 开始扫描与测试');
+                    updateProgress(100, 100, '完成');
+                    break;
+            }
+        }
+
+        function handleResetConfigResult(data) {
+            const deleted = (data.deleted || []).join(', ') || '无';
+            const missing = (data.missing || []).join(', ') || '无';
+            const failed = (data.failed || []).join(', ') || '无';
+            const reminder = data.reminder || '删掉之后，下次重新运行程序时会自动重新下载。';
+
+            if (data.success) {
+                alert(`本地缓存已清理\n\n已删除: ${deleted}\n不存在: ${missing}\n\n提示: ${reminder}`);
+                log(`本地缓存已清理，已删除: ${deleted}；不存在: ${missing}`);
+            } else {
+                alert(`本地缓存清理失败\n\n已删除: ${deleted}\n不存在: ${missing}\n删除失败: ${failed}\n\n提示: ${reminder}`);
+                log(`清理本地缓存时有文件没删掉: ${failed}`);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            connect();
+            initializeUI();
+            switchMode('official');
+            initThemeFromStorage();
+        });
+
+        function autoThemeBySystem() {
+            const saved = localStorage.getItem('cfdata-theme') || 'auto';
+            if (saved === 'auto') {
+                applyTheme('auto');
+            }
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', autoThemeBySystem);
+    </script>
+</body>
+
+</html>

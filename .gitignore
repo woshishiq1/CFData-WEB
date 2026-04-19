@@ -1,0 +1,25 @@
+bin/
+build/
+dist/
+coverage.out
+*.coverprofile
+*.log
+*.out
+.env
+.env.*
+
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Windows alternate data stream artifacts copied into archives
+*.Zone.Identifier
+*Zone.Identifier*
