@@ -1,45 +1,62 @@
 package main
 
 import (
-    "context"
-    "encoding/csv"
-    "fmt"
-    "io"
-    "net"
-    "net/http"
-    "net/url"
-    "os"
-    "strconv"
-    "strings"
-    "sync"
-    "sort"
-    "time"
+	"context"
+	"encoding/csv"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
-func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int) *iptestResult {
-    parts := strings.Fields(item)
-    if len(parts) != 2 {
-        return nil
-    }
-    ipAddr := parts[0]
-    portStr := parts[1]
-    port, err := strconv.Atoi(portStr)
-    if err != nil {
-        return nil
-    }
+type nsbFailureRecord struct {
+	index  int
+	ipAddr string
+	port   string
+	phase  string
+	reason string
+	detail string
+}
+
+func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int, inputIndex int) (*iptestResult, *nsbFailureRecord) {
+	parts := strings.Fields(item)
+	if len(parts) != 2 {
+		record := &nsbFailureRecord{index: inputIndex, phase: "scan", reason: "格式错误", detail: "需要每行格式为: IP 空格 端口"}
+		if len(parts) > 0 {
+			record.ipAddr = parts[0]
+		}
+		if len(parts) > 1 {
+			record.port = parts[1]
+		}
+		return nil, record
+	}
+	ipAddr := parts[0]
+	portStr := parts[1]
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "端口无效", detail: err.Error()}
+	}
 
     dialer := &net.Dialer{Timeout: timeout, KeepAlive: 0}
     start := time.Now()
-    conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(ipAddr, strconv.Itoa(port)))
-    if err != nil {
-        return nil
-    }
+	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(ipAddr, strconv.Itoa(port)))
+	if err != nil {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "TCP连接失败", detail: err.Error()}
+	}
     defer conn.Close()
 
-    tcpDuration := time.Since(start)
-    if delay > 0 && tcpDuration.Milliseconds() > int64(delay) {
-        return nil
-    }
+	tcpDuration := time.Since(start)
+	if delay > 0 && tcpDuration.Milliseconds() > int64(delay) {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "延迟超过阈值", detail: fmt.Sprintf("tcp=%dms, threshold=%dms", tcpDuration.Milliseconds(), delay)}
+	}
 
     protocol := "http://"
     if enableTLS {
@@ -55,42 +72,54 @@ func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int) *
         },
         Timeout: timeout,
     }
-    req, err := http.NewRequestWithContext(ctx, "GET", protocol+requestURL, nil)
-    if err != nil {
-        return nil
-    }
+	req, err := http.NewRequestWithContext(ctx, "GET", protocol+requestURL, nil)
+	if err != nil {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "构建请求失败", detail: err.Error()}
+	}
     req.Header.Set("User-Agent", "Mozilla/5.0")
     req.Close = true
 
-    resp, err := client.Do(req)
-    if err != nil {
-        return nil
-    }
-    duration := time.Since(start)
-    if duration > maxDuration {
-        resp.Body.Close()
-        return nil
-    }
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "Trace请求失败", detail: err.Error()}
+	}
+	duration := time.Since(start)
+	if duration > maxDuration {
+		resp.Body.Close()
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "Trace请求超时", detail: fmt.Sprintf("duration=%dms, max=%dms", duration.Milliseconds(), maxDuration.Milliseconds())}
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		errorBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+		return nil, &nsbFailureRecord{
+			index:  inputIndex,
+			ipAddr: ipAddr,
+			port:   portStr,
+			phase:  "scan",
+			reason: "HTTP状态异常",
+			detail: formatHTTPFailureDetail(resp.Status, errorBody),
+		}
+	}
 
-    bodyData, err := io.ReadAll(resp.Body)
-    resp.Body.Close()
-    if err != nil {
-        return nil
-    }
+	bodyData, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "读取响应失败", detail: err.Error()}
+	}
 
-    trace := parseTraceResponse(string(bodyData))
-    if _, ok := trace["uag"]; !ok || trace["uag"] != "Mozilla/5.0" {
-        return nil
-    }
+	trace := parseTraceResponse(string(bodyData))
+	if _, ok := trace["uag"]; !ok || trace["uag"] != "Mozilla/5.0" {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "Trace校验失败", detail: "返回内容不包含预期 uag=Mozilla/5.0"}
+	}
 
-    dataCenter := trace["colo"]
-    locCode := trace["loc"]
-    if dataCenter == "" {
-        return nil
-    }
+	dataCenter := trace["colo"]
+	locCode := trace["loc"]
+	if dataCenter == "" {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "数据中心为空", detail: "trace 中未返回 colo 字段"}
+	}
 
     loc := locationMap[dataCenter]
-    return &iptestResult{
+	return &iptestResult{
         ipAddr:      ipAddr,
         port:        port,
         dataCenter:  dataCenter,
@@ -109,8 +138,8 @@ func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int) *
         gateway:     trace["gateway"],
         rbi:         trace["rbi"],
         kex:         trace["kex"],
-        timestamp:   trace["ts"],
-    }
+		timestamp:   trace["ts"],
+	}, nil
 }
 
 func sortNSBResults(results []iptestResult, speedTest int) {
@@ -126,7 +155,7 @@ func sortNSBResults(results []iptestResult, speedTest int) {
     })
 }
 
-func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS bool, testURL string) float64 {
+func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS bool, testURL string) (float64, string) {
     if strings.TrimSpace(testURL) == "" {
         testURL = speedTestURL
     }
@@ -139,10 +168,10 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
         testURL = scheme + testURL
     }
 
-    parsedURL, err := url.Parse(testURL)
-    if err != nil {
-        return 0
-    }
+	parsedURL, err := url.Parse(testURL)
+	if err != nil {
+		return 0, "测速地址解析失败: " + err.Error()
+	}
 
     client := http.Client{
         Transport: &http.Transport{
@@ -157,29 +186,33 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
 
     fullURL := fmt.Sprintf("%s%s%s", scheme, parsedURL.Host, parsedURL.RequestURI())
 
-    req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
-    if err != nil {
-        return 0
-    }
+	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
+	if err != nil {
+		return 0, "测速请求构建失败: " + err.Error()
+	}
     req.Header.Set("User-Agent", "Mozilla/5.0")
 
     start := time.Now()
-    resp, err := client.Do(req)
-    if err != nil {
-        return 0
-    }
-    defer resp.Body.Close()
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, "测速请求失败: " + err.Error()
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		errorBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return 0, "HTTP状态异常: " + formatHTTPFailureDetail(resp.Status, errorBody)
+	}
 
-    written, err := io.Copy(io.Discard, resp.Body)
-    if err != nil {
-        return 0
-    }
-    duration := time.Since(start)
-    if duration <= 0 {
-        return 0
-    }
+	written, err := io.Copy(io.Discard, resp.Body)
+	if err != nil {
+		return 0, "测速下载失败: " + err.Error()
+	}
+	duration := time.Since(start)
+	if duration <= 0 {
+		return 0, "测速耗时异常: duration<=0"
+	}
 
-    return float64(written) / duration.Seconds() / 1024
+	return float64(written) / duration.Seconds() / 1024, ""
 }
 
 func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent, outFile string, maxThreads, speedTest int, speedURL string, enableTLS bool, delay int) {
@@ -215,14 +248,28 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
         return
     }
 
-    session.sendWSMessage("log", fmt.Sprintf("共读取 %d 条 ip 端口，开始延迟检测", len(ips)))
+	session.sendWSMessage("log", fmt.Sprintf("共读取 %d 条 ip 端口，开始延迟检测", len(ips)))
 
-    nsbResults := make([]iptestResult, 0, len(ips))
-    resMutex := &sync.Mutex{}
-    total := len(ips)
-    wasCanceled := runBoundedWorkers(ctx, total, maxThreads, 1, func(current, total int) {
-        reportNSBProgress(session, "scan", current, total, "延迟扫描")
-    }, func(idx int) {
+	nsbResults := make([]iptestResult, 0, len(ips))
+	resMutex := &sync.Mutex{}
+	var failures []nsbFailureRecord
+	var failMutex sync.Mutex
+	if debugMode {
+		failures = make([]nsbFailureRecord, 0, len(ips))
+		failureCSVFile := buildNSBFailureCSVName(outFile)
+		defer func() {
+			if err := writeNSBFailureCSV(failureCSVFile, failures); err != nil {
+				session.sendWSMessage("log", "写入非标失败明细 CSV 失败: "+err.Error())
+				return
+			}
+			session.sendWSMessage("log", fmt.Sprintf("非标失败明细已导出: %s (失败 %d 条)", failureCSVFile, len(failures)))
+		}()
+	}
+
+	total := len(ips)
+	wasCanceled := runBoundedWorkers(ctx, total, maxThreads, 1, func(current, total int) {
+		reportNSBProgress(session, "scan", current, total, "延迟扫描")
+	}, func(idx int) {
         item := ips[idx]
         select {
         case <-ctx.Done():
@@ -230,10 +277,15 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
         default:
         }
 
-        res := scanNSBEntry(ctx, item, enableTLS, delay)
-        if res == nil {
-            return
-        }
+		res, failure := scanNSBEntry(ctx, item, enableTLS, delay, idx)
+		if debugMode && failure != nil {
+			failMutex.Lock()
+			failures = append(failures, *failure)
+			failMutex.Unlock()
+		}
+		if res == nil {
+			return
+		}
 
         resMutex.Lock()
         nsbResults = append(nsbResults, *res)
@@ -264,9 +316,22 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
             default:
             }
 
-            res := &nsbResults[idx]
-            res.downloadSpeed = runNSBDownloadSpeed(ctx, res.ipAddr, res.port, enableTLS, speedURL)
-        })
+			res := &nsbResults[idx]
+			speed, speedErr := runNSBDownloadSpeed(ctx, res.ipAddr, res.port, enableTLS, speedURL)
+			res.downloadSpeed = speed
+			if debugMode && speedErr != "" {
+				failMutex.Lock()
+				failures = append(failures, nsbFailureRecord{
+					index:  idx,
+					ipAddr: res.ipAddr,
+					port:   strconv.Itoa(res.port),
+					phase:  "speed",
+					reason: "测速失败",
+					detail: speedErr,
+				})
+				failMutex.Unlock()
+			}
+		})
         if speedCanceled {
             wasCanceled = true
         }
@@ -330,8 +395,8 @@ func nsbCSVHeaders(includeSpeed bool) []string {
 }
 
 func nsbCSVRow(res iptestResult, includeSpeed bool, enableTLS bool) []string {
-    row := []string{
-        res.ipAddr,
+	row := []string{
+		res.ipAddr,
         strconv.Itoa(res.port),
         strconv.FormatBool(enableTLS),
         res.dataCenter,
@@ -355,6 +420,72 @@ func nsbCSVRow(res iptestResult, includeSpeed bool, enableTLS bool) []string {
         res.rbi,
         res.kex,
         res.timestamp,
-    )
-    return row
+	)
+	return row
+}
+
+func buildNSBFailureCSVName(outFile string) string {
+	safeOut := safeFilename(outFile)
+	ext := filepath.Ext(safeOut)
+	name := strings.TrimSuffix(safeOut, ext)
+	if name == "" {
+		name = "ip"
+	}
+	if ext == "" {
+		ext = ".csv"
+	}
+	return name + "_failures" + ext
+}
+
+func writeNSBFailureCSV(outFile string, failures []nsbFailureRecord) error {
+	outFile = safeFilename(outFile)
+	file, err := os.Create(outFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	if err := writer.Write([]string{"IP", "端口", "阶段", "失败原因", "错误详情"}); err != nil {
+		return err
+	}
+
+	sort.SliceStable(failures, func(i, j int) bool {
+		if failures[i].index == failures[j].index {
+			return failures[i].phase < failures[j].phase
+		}
+		return failures[i].index < failures[j].index
+	})
+
+	for _, failure := range failures {
+		if err := writer.Write([]string{failure.ipAddr, failure.port, failure.phase, failure.reason, failure.detail}); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func formatHTTPFailureDetail(status string, body []byte) string {
+	bodyText := sanitizeErrorText(string(body), 500)
+	if bodyText == "" {
+		return status
+	}
+	return status + " | 响应: " + bodyText
+}
+
+func sanitizeErrorText(text string, maxLen int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	text = strings.ReplaceAll(text, "\r", " ")
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.Join(strings.Fields(text), " ")
+	if maxLen > 0 && len(text) > maxLen {
+		return text[:maxLen] + "..."
+	}
+	return text
 }
