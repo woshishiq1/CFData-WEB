@@ -70,6 +70,7 @@ func scanOfficialIP(ctx context.Context, ip string, port int) *ScanResult {
 	trace := parseTraceResponse(bodyStr)
 	dataCenter := strings.TrimSpace(trace["colo"])
 	if dataCenter == "" {
+		sendLog(fmt.Sprintf("[official-scan-debug] trace missing colo: ip=%s port=%d body=%q", ip, port, strings.TrimSpace(bodyStr)))
 		return nil
 	}
 

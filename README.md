@@ -107,6 +107,9 @@ CLI 用法: ./combined_refactor_debug -cli -mode=official ...
 -user
   说明: Web 认证用户名（不设置则不启用认证）
   默认: <空>
+-session
+  说明: Web 登录会话有效期（分钟）
+  默认: 720
 -password
   说明: Web 认证密码（需同时设置 -user，否则不启用）
   默认: <空>

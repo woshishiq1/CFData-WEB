@@ -14,22 +14,22 @@ import (
 )
 
 type cliConfig struct {
-	enabled        bool
-	mode           string
-	ipType         int
-	threads        int
-	port           int
-	delay          int
-	dc             string
-	file           string
-	outFile        string
-	speedTest      int
-	speedLimit     int
-	speedMin       float64
-	enableTLS      bool
-	showProgress   bool
-	noColor        bool
-	compactIPv4    bool
+	enabled      bool
+	mode         string
+	ipType       int
+	threads      int
+	port         int
+	delay        int
+	dc           string
+	file         string
+	outFile      string
+	speedTest    int
+	speedLimit   int
+	speedMin     float64
+	enableTLS    bool
+	showProgress bool
+	noColor      bool
+	compactIPv4  bool
 }
 
 type cliFlagInfo struct {
@@ -47,8 +47,12 @@ var (
 	ansiCyan    = "\033[36m"
 	ansiMagenta = "\033[35m"
 
-			cliCommonFlags = []cliFlagInfo{
+	cliCommonFlags = []cliFlagInfo{
 		{name: "cli", description: "是否启用命令行模式，不带时默认启动 Web（请用 -cli 或 -cli=true，不要写成 -cli true）", defaultValue: "false"},
+		{name: "port", description: "Web 服务监听端口", defaultValue: "13335"},
+		{name: "user", description: "Web 认证用户名（不设置则不启用认证）", defaultValue: ""},
+		{name: "password", description: "Web 认证密码（需同时设置 -user）", defaultValue: ""},
+		{name: "session", description: "Web 登录会话有效期（分钟）", defaultValue: "720"},
 		{name: "mode", description: "运行模式：official 或 nsb", defaultValue: "official"},
 		{name: "threads", description: "扫描并发数", defaultValue: "100"},
 		{name: "out", description: "输出文件名", defaultValue: "ip.csv"},
