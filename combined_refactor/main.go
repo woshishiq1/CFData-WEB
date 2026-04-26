@@ -12,7 +12,7 @@ import (
 
 var webUser, webPassword string
 var webSessionMinutes int
-var boolFlagNames = []string{"cli", "tls", "progress", "debug", "nocolor", "compactipv4"}
+var boolFlagNames = []string{"cli", "tls", "progress", "debug", "nocolor", "compactipv4", "compact"}
 
 func rewriteBoolFlagArgs() {
 	if len(os.Args) <= 2 {

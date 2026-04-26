@@ -152,7 +152,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			session.startTask(func(ctx context.Context, session *appSession) {
-				runNSBTask(ctx, session, params.FileName, params.FileContent, params.OutFile, params.MaxThreads, params.SpeedTest, params.SpeedURL, params.EnableTLS, params.Delay)
+				runNSBTask(ctx, session, params.FileName, params.FileContent, params.OutFile, params.MaxThreads, params.SpeedTest, params.SpeedURL, params.EnableTLS, params.Delay, params.Compact)
 			})
 		},
 		"stop_task": func(data json.RawMessage) {

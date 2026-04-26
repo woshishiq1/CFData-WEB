@@ -27,6 +27,7 @@ type cliConfig struct {
 	speedLimit   int
 	speedMin     float64
 	enableTLS    bool
+	compactNSB   bool
 	showProgress bool
 	noColor      bool
 	compactIPv4  bool
@@ -74,6 +75,7 @@ var (
 	cliNSBFlags = []cliFlagInfo{
 		{name: "file", description: "非标模式输入文件路径", defaultValue: ""},
 		{name: "tls", description: "非标模式是否启用 TLS", defaultValue: "true"},
+		{name: "compact", description: "非标模式导出精简表格列", defaultValue: "true"},
 	}
 )
 
@@ -92,6 +94,7 @@ func registerCLIFlags() *cliConfig {
 	flag.IntVar(&cfg.speedLimit, "speedlimit", 0, "官方模式测速达标结果上限；0 表示关闭官方测速")
 	flag.Float64Var(&cfg.speedMin, "speedmin", 0.1, "官方模式测速达标下限，单位 MB/s")
 	flag.BoolVar(&cfg.enableTLS, "tls", true, "非标模式是否启用 TLS")
+	flag.BoolVar(&cfg.compactNSB, "compact", true, "非标模式导出精简表格列")
 	flag.BoolVar(&cfg.showProgress, "progress", true, "CLI 模式输出进度日志")
 	flag.BoolVar(&cfg.noColor, "nocolor", false, "禁用 ANSI 颜色输出（cmd 等不支持的终端建议开启）")
 	flag.BoolVar(&cfg.compactIPv4, "compactipv4", false, "精简本地 IPv4 地址库，按 /24 子网探测 TCP:80 连通性后覆盖 ips-v4.txt")
@@ -367,7 +370,7 @@ func runNSBCLI(cfg *cliConfig) error {
 
 	session := newCLISession(cfg)
 	if err := session.runTaskSync(func(ctx context.Context, session *appSession) {
-		runNSBTask(ctx, session, cfg.file, content, cfg.outFile, cfg.threads, cfg.speedTest, speedTestURL, cfg.enableTLS, cfg.delay)
+		runNSBTask(ctx, session, cfg.file, content, cfg.outFile, cfg.threads, cfg.speedTest, speedTestURL, cfg.enableTLS, cfg.delay, cfg.compactNSB)
 	}); err != nil {
 		return cliTaskError(err)
 	}
@@ -491,6 +494,7 @@ func printCLIConfig(cfg *cliConfig) {
 	printGroup("非标模式参数", []item{
 		{"file", lookupCLIFlagDescription(cliNSBFlags, "file"), cfg.file, ""},
 		{"tls", lookupCLIFlagDescription(cliNSBFlags, "tls"), strconv.FormatBool(cfg.enableTLS), "true"},
+		{"compact", lookupCLIFlagDescription(cliNSBFlags, "compact"), strconv.FormatBool(cfg.compactNSB), "true"},
 	})
 	fmt.Println(colorize("----------------------------------------", ansiCyan))
 }

@@ -76,6 +76,8 @@ type iptestResult struct {
 	tcpDuration   time.Duration
 	outboundIP    string
 	ipType        string
+	asnNumber     string
+	asnOrg        string
 	visitScheme   string
 	tlsVersion    string
 	sni           string
@@ -100,6 +102,8 @@ type nsbScanMessage struct {
 	Speed       string `json:"speed"`
 	OutboundIP  string `json:"outboundIP"`
 	IPType      string `json:"ipType"`
+	ASNNumber   string `json:"asnNumber"`
+	ASNOrg      string `json:"asnOrg"`
 	VisitScheme string `json:"visitScheme"`
 	TLSVersion  string `json:"tlsVersion"`
 	SNI         string `json:"sni"`
@@ -124,6 +128,8 @@ func (r *iptestResult) toNSBMessage(speedStr string) nsbScanMessage {
 		Speed:       speedStr,
 		OutboundIP:  r.outboundIP,
 		IPType:      r.ipType,
+		ASNNumber:   r.asnNumber,
+		ASNOrg:      r.asnOrg,
 		VisitScheme: r.visitScheme,
 		TLSVersion:  r.tlsVersion,
 		SNI:         r.sni,

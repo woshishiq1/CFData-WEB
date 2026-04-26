@@ -125,6 +125,7 @@ func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int, i
 	}
 
 	loc := locationMap[dataCenter]
+	asnNumber, asnOrg := lookupASN(trace["ip"])
 	return &iptestResult{
 		ipAddr:      ipAddr,
 		port:        port,
@@ -136,6 +137,8 @@ func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int, i
 		tcpDuration: tcpDuration,
 		outboundIP:  trace["ip"],
 		ipType:      getIPType(trace["ip"]),
+		asnNumber:   asnNumber,
+		asnOrg:      asnOrg,
 		visitScheme: trace["visit_scheme"],
 		tlsVersion:  trace["tls"],
 		sni:         trace["sni"],
@@ -286,7 +289,7 @@ done:
 	return float64(written) / duration.Seconds() / 1024, ""
 }
 
-func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent, outFile string, maxThreads, speedTest int, speedURL string, enableTLS bool, delay int) {
+func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent, outFile string, maxThreads, speedTest int, speedURL string, enableTLS bool, delay int, compact bool) {
 	session.sendWSMessage("log", fmt.Sprintf("开始非标优选：%s", fileName))
 
 	tmpFile, err := os.CreateTemp("", "cfdata-nsb-*.txt")
@@ -427,7 +430,7 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 
 	sortNSBResults(nsbResults, speedTest)
 
-	if err := writeNSBCSV(outFile, nsbResults, speedTest); err != nil {
+	if err := writeNSBCSV(outFile, nsbResults, speedTest, compact); err != nil {
 		session.sendWSMessage("error", "导出 CSV 失败: "+err.Error())
 		return
 	}
@@ -442,7 +445,7 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	session.sendWSMessage("log", fmt.Sprintf("非标优选完成，结果文件: %s", outFile))
 }
 
-func writeNSBCSV(outFile string, results []iptestResult, speedTest int) error {
+func writeNSBCSV(outFile string, results []iptestResult, speedTest int, compact bool) error {
 	outFile = safeFilename(outFile)
 	file, err := os.Create(outFile)
 	if err != nil {
@@ -457,13 +460,12 @@ func writeNSBCSV(outFile string, results []iptestResult, speedTest int) error {
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	includeSpeed := speedTest > 0
-	if err := writer.Write(nsbCSVHeaders(includeSpeed)); err != nil {
+	if err := writer.Write(nsbCSVHeaders(compact)); err != nil {
 		return err
 	}
 
 	for _, res := range results {
-		if err := writer.Write(nsbCSVRow(res, includeSpeed)); err != nil {
+		if err := writer.Write(nsbCSVRow(res, speedTest > 0, compact)); err != nil {
 			return err
 		}
 	}
@@ -471,32 +473,53 @@ func writeNSBCSV(outFile string, results []iptestResult, speedTest int) error {
 	return nil
 }
 
-func nsbCSVHeaders(includeSpeed bool) []string {
-	headers := []string{"IP", "端口", "TLS", "数据中心", "源IP位置", "地区", "城市", "网络延迟"}
-	if includeSpeed {
-		headers = append(headers, "下载速度")
+func nsbCSVHeaders(compact bool) []string {
+	if compact {
+		return []string{"IP地址", "端口号", "TLS", "网络延迟", "下载速度", "出站IP", "IP类型", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
 	}
-	headers = append(headers, "出站IP", "IP类型", "访问协议", "TLS版本", "SNI", "HTTP版本", "WARP", "Gateway", "RBI", "密钥交换", "时间戳")
+	headers := []string{"IP地址", "端口号", "TLS", "网络延迟", "下载速度", "出站IP", "IP类型", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
+	headers = append(headers, "访问协议", "TLS版本", "SNI", "HTTP版本", "WARP", "Gateway", "RBI", "密钥交换", "时间戳")
 	return headers
 }
 
-func nsbCSVRow(res iptestResult, includeSpeed bool) []string {
+func nsbCSVRow(res iptestResult, includeSpeed bool, compact bool) []string {
+	speed := "-"
+	if includeSpeed {
+		speed = fmt.Sprintf("%.2f MB/s", res.downloadSpeed/1024)
+	}
+	if compact {
+		return []string{
+			res.ipAddr,
+			strconv.Itoa(res.port),
+			strconv.FormatBool(res.visitScheme == "https"),
+			res.latency,
+			speed,
+			res.outboundIP,
+			res.ipType,
+			res.dataCenter,
+			res.locCode,
+			res.region,
+			res.city,
+			fallbackDash(res.asnNumber),
+			fallbackDash(res.asnOrg),
+		}
+	}
 	row := []string{
 		res.ipAddr,
 		strconv.Itoa(res.port),
 		strconv.FormatBool(res.visitScheme == "https"),
+		res.latency,
+		speed,
+		res.outboundIP,
+		res.ipType,
 		res.dataCenter,
 		res.locCode,
 		res.region,
 		res.city,
-		res.latency,
-	}
-	if includeSpeed {
-		row = append(row, fmt.Sprintf("%.2f MB/s", res.downloadSpeed/1024))
+		fallbackDash(res.asnNumber),
+		fallbackDash(res.asnOrg),
 	}
 	row = append(row,
-		res.outboundIP,
-		res.ipType,
 		res.visitScheme,
 		res.tlsVersion,
 		res.sni,
@@ -508,6 +531,13 @@ func nsbCSVRow(res iptestResult, includeSpeed bool) []string {
 		res.timestamp,
 	)
 	return row
+}
+
+func fallbackDash(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "-"
+	}
+	return value
 }
 
 func buildNSBFailureCSVName(outFile string) string {

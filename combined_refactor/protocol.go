@@ -35,4 +35,5 @@ type startNSBTaskRequest struct {
 	SpeedURL    string `json:"speedURL"`
 	EnableTLS   bool   `json:"enableTLS"`
 	Delay       int    `json:"delay"`
+	Compact     bool   `json:"compact"`
 }

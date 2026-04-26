@@ -94,7 +94,8 @@ func resetAllConfigFiles(session *appSession) {
 		return
 	}
 
-	files := []string{"ips-v6.txt", "ips-v4.txt", "locations.json"}
+	resetASNReader()
+	files := []string{"ips-v6.txt", "ips-v4.txt", "locations.json", asnDBFile}
 	deleted := []string{}
 	missing := []string{}
 	failed := []string{}
@@ -141,19 +142,27 @@ func getIPListContent(filename, apiURL string) (string, error) {
 }
 
 func getURLContent(targetURL string) (string, error) {
-	resp, err := upstreamHTTPClient.Get(targetURL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("请求失败: %s", resp.Status)
-	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := getURLBytes(targetURL)
 	if err != nil {
 		return "", err
 	}
 	return string(data), nil
+}
+
+func getURLBytes(targetURL string) ([]byte, error) {
+	resp, err := upstreamHTTPClient.Get(targetURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("请求失败: %s", resp.Status)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func getFileContent(filename string) (string, error) {

@@ -621,6 +621,26 @@
             box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4) !important;
         }
 
+        .table-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .compact-toggle {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .compact-toggle input {
+            padding: 0;
+        }
+
         .action-btn.selected {
             background: linear-gradient(135deg, #10b981, #34d399);
         }
@@ -634,6 +654,30 @@
             color: var(--primary-color);
             cursor: pointer;
             border-bottom: 1px dashed var(--primary-color);
+        }
+
+        .ip-cell {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ip-detail-link {
+            opacity: 0;
+            text-decoration: none;
+            font-size: 13px;
+            line-height: 1;
+            color: var(--text-secondary);
+            transition: opacity 0.12s ease, color 0.12s ease;
+        }
+
+        td:hover .ip-detail-link,
+        .ip-detail-link:focus {
+            opacity: 1;
+        }
+
+        .ip-detail-link:hover {
+            color: var(--primary-color);
         }
 
         .log-box {
@@ -914,7 +958,10 @@
             <div class="section-box">
                 <h3 style="display:flex;justify-content:space-between;align-items:center;">
                     <span>扫描结果 <span class="badge" id="scanCount">0</span></span>
-                    <button class="action-btn export-btn" onclick="exportScanCSV()">📥 导出 CSV</button>
+                    <span class="table-actions">
+                        <label id="nsbCompactToggleWrap" class="compact-toggle"><input id="nsbCompactView" type="checkbox" checked onchange="setNSBCompactView(this.checked)"> 精简表格</label>
+                        <button class="action-btn export-btn" onclick="exportScanCSV()">📥 导出 CSV</button>
+                    </span>
                 </h3>
                 <div class="scroll-table" style="max-height:520px;">
                     <table id="scanTable">
@@ -981,7 +1028,11 @@
         let nsbRows = [];
         let nsbLiveRows = [];
         let nsbLiveIndex = {};
+        let nsbCompactView = true;
         let currentSpeedTestingIP = '';
+        let runningTaskLabel = '';
+        let runningTaskMode = '';
+        let runningTaskTab = 'scan';
 
         const LATENCY_GREEN = 100;
         const LATENCY_YELLOW = 200;
@@ -1102,7 +1153,7 @@
         }
 
         function resetAllConfig() {
-            if (!window.confirm('这会清掉本地缓存文件：ips-v4.txt、ips-v6.txt、locations.json。要继续吗？')) {
+            if (!window.confirm('这会清掉本地缓存文件：ips-v4.txt、ips-v6.txt、locations.json、GeoLite2-ASN.mmdb。要继续吗？')) {
                 return;
             }
             if (!wsSend({ type: 'reset_all_config' })) {
@@ -1146,7 +1197,10 @@
                 btn.textContent = '⏳';
             }
             isTaskRunning = true;
-            setStartLoading('终止精简');
+            runningTaskLabel = 'IPv4 地址库精简';
+            runningTaskMode = currentMode;
+            runningTaskTab = 'scan';
+            setStartLoading(getRunningButtonText());
             resetProgress();
             progressBox.style.display = 'block';
             updateProgress(0, 1, '精简准备中');
@@ -1227,9 +1281,12 @@
                 nsbControls.classList.add('hidden');
                 document.querySelector('.tabs .tab:last-child').style.display = 'block';
                 document.getElementById('dcSection').style.display = dcList.length ? 'block' : 'none';
-                document.getElementById('btnStartLabel').textContent = '✨ 开始扫描与测试';
-                renderScanHeaders('official');
-                if (!isTaskRunning) {
+                if (!isTaskRunning) resetButton('✨ 开始扫描与测试');
+                updateNSBCompactToggle();
+                if (isTaskRunning && runningTaskMode === 'official') {
+                    showRunningTaskView();
+                } else if (!isTaskRunning) {
+                    renderScanHeaders('official');
                     switchTab('scan');
                 }
             } else {
@@ -1241,10 +1298,15 @@
                     switchTab('scan');
                 }
                 document.getElementById('dcSection').style.display = 'none';
-                document.getElementById('btnStartLabel').textContent = '✨ 开始扫描与测试';
-                renderScanHeaders('nsb');
+                if (!isTaskRunning) resetButton('✨ 开始扫描与测试');
+                updateNSBCompactToggle();
+                if (isTaskRunning && runningTaskMode === 'nsb') {
+                    showRunningTaskView();
+                } else if (!isTaskRunning) {
+                    renderScanHeaders('nsb');
+                }
             }
-            resetProgress();
+            if (!isTaskRunning) resetProgress();
             log(`切换至：${mode === 'official' ? '官方优选' : '非标优选'}`);
         }
 
@@ -1267,6 +1329,15 @@
 
             if (tabId === 'test' && currentMode === 'nsb') {
                 switchTab('scan');
+                return;
+            }
+
+            if (currentMode === 'official' && tabId === 'test') {
+                renderAllTestResults();
+            } else if (currentMode === 'official' && tabId === 'scan' && scanData.length) {
+                renderScanHeaders('official');
+                scanData.forEach(renderScanRowOfficial);
+                updateBadge('scanCount', scanData.length);
             }
         }
 
@@ -1277,12 +1348,14 @@
             const p = Math.min(Math.max((current / total) * 100, 0), 100);
             progressBar.style.width = `${Math.round(p)}%`;
             progressBar.textContent = `${text || ''} ${Math.round(p)}%`;
+            progressBar.style.animation = p >= 100 ? 'none' : 'stripe 1s linear infinite';
         }
 
         function resetProgress() {
             progressBar.style.width = '0%';
             progressBar.style.background = 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent), linear-gradient(to right, var(--primary-color), #60a5fa)';
             progressBar.style.backgroundSize = '20px 20px, 100% 100%';
+            progressBar.style.animation = 'stripe 1s linear infinite';
             progressBar.textContent = '0%';
         }
 
@@ -1298,6 +1371,47 @@
                 sp.className = 'btn-spinner';
             }
             btn.disabled = false;
+        }
+
+        function getRunningButtonText() {
+            return `${runningTaskLabel || '任务'}测试中 - 终止测试`;
+        }
+
+        function getStopConfirmText() {
+            return `确定要终止当前${runningTaskLabel || '任务'}吗？`;
+        }
+
+        function clearRunningTaskLabel() {
+            runningTaskLabel = '';
+            runningTaskMode = '';
+            runningTaskTab = 'scan';
+        }
+
+        function showRunningTaskView() {
+            if (!runningTaskMode || currentMode !== runningTaskMode) return;
+            if (runningTaskTab === 'test') {
+                switchTab('test');
+                renderAllTestResults();
+                return;
+            }
+            switchTab('scan');
+            if (runningTaskMode === 'official') {
+                renderScanHeaders('official');
+                scanData.forEach(renderScanRowOfficial);
+                updateBadge('scanCount', scanData.length);
+            } else if (nsbRows.length) {
+                renderScanRowsCSV(nsbHeaders, nsbRows);
+            } else {
+                renderScanHeaders('nsb');
+                renderAllNSBLiveRows();
+                updateBadge('scanCount', nsbLiveRows.length);
+            }
+        }
+
+        function finishRunningTask(buttonText = '✨ 开始扫描与测试') {
+            isTaskRunning = false;
+            clearRunningTaskLabel();
+            resetButton(buttonText);
         }
 
         function resetButton(text = '✨ 开始扫描与测试') {
@@ -1319,10 +1433,26 @@
             if (mode === 'official') {
                 thead.innerHTML = '<tr><th>IP</th><th>端口</th><th>数据中心</th><th>地区</th><th>城市</th><th>延迟</th></tr>';
             } else {
-                const headers = NSB_LIVE_HEADERS;
+                const headers = getVisibleNSBHeaders();
                 const headerRow = headers.map(h => `<th>${h}</th>`).join('');
                 thead.innerHTML = `<tr>${headerRow}</tr>`;
             }
+        }
+
+        function updateNSBCompactToggle() {
+            const wrap = document.getElementById('nsbCompactToggleWrap');
+            if (wrap) wrap.style.display = currentMode === 'nsb' ? 'inline-flex' : 'none';
+        }
+
+        function setNSBCompactView(enabled) {
+            nsbCompactView = !!enabled;
+            if (currentMode !== 'nsb') return;
+            if (nsbRows.length) {
+                renderScanRowsCSV(nsbHeaders, nsbRows);
+                return;
+            }
+            renderScanHeaders('nsb');
+            renderAllNSBLiveRows();
         }
 
         function renderScanRowOfficial(row) {
@@ -1330,22 +1460,34 @@
             const latencyVal = parseFloat(row.LatencyStr);
             const latencyColor = getLatencyColor(latencyVal);
             // 修改点：为 copyToClipboard 增加 event 参数，以便定位提示文字
-            const html = `<tr><td><span class="copy-ip" onclick="copyToClipboard('${row.IP}', event)">${row.IP}</span></td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
+            const html = `<tr><td>${renderIPCell(row.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
             tbody.insertAdjacentHTML('beforeend', html);
         }
 
+        function escapeJSString(v) {
+            return String(v ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        function renderIPCell(ip) {
+            const rawIP = String(ip ?? '');
+            const safeIP = escapeHTML(rawIP);
+            const jsIP = escapeJSString(rawIP);
+            const hrefIP = encodeURIComponent(rawIP);
+            return `<span class="ip-cell"><span class="copy-ip" onclick="copyToClipboard('${jsIP}', event)">${safeIP}</span><a class="ip-detail-link" href="https://ippure.com/?ip=${hrefIP}" target="_blank" rel="noopener noreferrer" title="前往 ippure.com 查看 IP 详情" onclick="event.stopPropagation()">ⓘ</a></span>`;
+        }
+
         function renderNSBRowFromCSV(headers, r) {
-            let ipIndex = headers.indexOf('IP');
-            let portIndex = headers.indexOf('端口');
+            let ipIndex = headers.indexOf('IP地址');
+            let portIndex = headers.indexOf('端口号');
             let latencyIndex = headers.indexOf('网络延迟');
             let speedIndex = headers.indexOf('下载速度');
             return headers.map((_, idx) => {
                 const val = escapeHTML(r[idx] ?? '');
                 const rawVal = String(r[idx] ?? '');
                 if (idx === ipIndex && ipIndex !== -1) {
-                    return `<td><span class="copy-ip" onclick="copyToClipboard('${rawVal.replace(/'/g, "\\'")}', event)">${val}</span></td>`;
+                    return `<td>${renderIPCell(rawVal)}</td>`;
                 } else if (idx === portIndex && portIndex !== -1) {
-                    return `<td><span class="copy-ip" onclick="copyToClipboard('${rawVal.replace(/'/g, "\\'")}', event)">${val}</span></td>`;
+                    return `<td><span class="copy-ip" onclick="copyToClipboard('${escapeJSString(rawVal)}', event)">${val}</span></td>`;
                 } else if (idx === latencyIndex && latencyIndex !== -1) {
                     const latencyVal = parseFloat(rawVal);
                     const color = getLatencyColor(latencyVal);
@@ -1364,34 +1506,76 @@
             const tbody = document.querySelector('#scanTable tbody');
             tbody.innerHTML = '';
             renderScanHeaders('nsb');
+            const visibleHeaders = filterNSBHeaders(headers);
 
             rows.forEach((r) => {
-                const tds = renderNSBRowFromCSV(headers, r);
+                const visibleRow = filterNSBRow(headers, r);
+                const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
                 tbody.insertAdjacentHTML('beforeend', `<tr>${tds}</tr>`);
             });
 
             updateBadge('scanCount', rows.length);
         }
 
-        const NSB_LIVE_HEADERS = ['IP', '端口', 'TLS', '数据中心', '源IP位置', '地区', '城市', '网络延迟', '下载速度', '出站IP', 'IP类型', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
+        const NSB_LIVE_HEADERS = ['IP地址', '端口号', 'TLS', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
+        const NSB_COMPACT_HEADERS = ['IP地址', '端口号', 'TLS', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织'];
 
-        function addNSBLiveResult(row) {
+        function normalizeNSBHeader(header) {
+            if (header === 'IP') return 'IP地址';
+            if (header === '端口') return '端口号';
+            return header;
+        }
+
+        function filterNSBHeaders(headers) {
+            const normalized = (headers || []).map(normalizeNSBHeader);
+            if (!nsbCompactView) return normalized;
+            return NSB_COMPACT_HEADERS.filter((h) => normalized.includes(h));
+        }
+
+        function filterNSBRow(headers, row) {
+            const normalized = (headers || []).map(normalizeNSBHeader);
+            if (!nsbCompactView) return row;
+            return NSB_COMPACT_HEADERS.filter((h) => normalized.includes(h)).map((h) => row[normalized.indexOf(h)] ?? '');
+        }
+
+        function getVisibleNSBHeaders() {
+            if (nsbHeaders.length) return filterNSBHeaders(nsbHeaders);
+            return nsbCompactView ? NSB_COMPACT_HEADERS : NSB_LIVE_HEADERS;
+        }
+
+        function nsbRowToArray(row) {
+            return [
+                row.ip || '', row.port || '', row.tls ?? '-', row.latency || '-', row.speed || '-',
+                row.outboundIP || '-', row.ipType || '-', row.dc || '-', row.loc || '-',
+                row.region || '-', row.city || '-', row.asnNumber || '-', row.asnOrg || '-',
+                row.visitScheme || '-', row.tlsVersion || '-', row.sni || '-', row.httpVersion || '-',
+                row.warp || '-', row.gateway || '-', row.rbi || '-',
+                row.kex || '-', row.timestamp || '-'
+            ];
+        }
+
+        function renderAllNSBLiveRows() {
+            const tbody = document.querySelector('#scanTable tbody');
+            tbody.innerHTML = '';
+            nsbLiveRows.forEach((row) => {
+                const visibleHeaders = getVisibleNSBHeaders();
+                const visibleRow = filterNSBRow(NSB_LIVE_HEADERS, nsbRowToArray(row));
+                const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
+                tbody.insertAdjacentHTML('beforeend', `<tr>${tds}</tr>`);
+            });
+        }
+
+        function addNSBLiveResult(row, render = true) {
             const key = (row.ip || '') + ':' + (row.port || '');
             const existingIdx = nsbLiveIndex[key];
 
             if (existingIdx !== undefined) {
                 Object.assign(nsbLiveRows[existingIdx], row);
+                if (!render) return;
                 const updated = nsbLiveRows[existingIdx];
-                const r = [
-                    updated.ip || '', updated.port || '', updated.tls ?? '-', updated.dc || '-',
-                    updated.loc || '-', updated.region || '-', updated.city || '-',
-                    updated.latency || '-', updated.speed || '-',
-                    updated.outboundIP || '-', updated.ipType || '-', updated.visitScheme || '-',
-                    updated.tlsVersion || '-', updated.sni || '-', updated.httpVersion || '-',
-                    updated.warp || '-', updated.gateway || '-', updated.rbi || '-',
-                    updated.kex || '-', updated.timestamp || '-'
-                ];
-                const tds = renderNSBRowFromCSV(NSB_LIVE_HEADERS, r);
+                const visibleHeaders = getVisibleNSBHeaders();
+                const visibleRow = filterNSBRow(NSB_LIVE_HEADERS, nsbRowToArray(updated));
+                const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
                 const tbody = document.querySelector('#scanTable tbody');
                 const tr = tbody.children[existingIdx];
                 if (tr) tr.innerHTML = tds;
@@ -1401,26 +1585,20 @@
             nsbLiveRows.push(row);
             nsbLiveIndex[key] = nsbLiveRows.length - 1;
             updateBadge('scanCount', nsbLiveRows.length);
+            if (!render) return;
 
-            const r = [
-                row.ip || '', row.port || '', row.tls ?? '-', row.dc || '-',
-                row.loc || '-', row.region || '-', row.city || '-',
-                row.latency || '-', row.speed || '-',
-                row.outboundIP || '-', row.ipType || '-', row.visitScheme || '-',
-                row.tlsVersion || '-', row.sni || '-', row.httpVersion || '-',
-                row.warp || '-', row.gateway || '-', row.rbi || '-',
-                row.kex || '-', row.timestamp || '-'
-            ];
-            const tds = renderNSBRowFromCSV(NSB_LIVE_HEADERS, r);
+            const visibleHeaders = getVisibleNSBHeaders();
+            const visibleRow = filterNSBRow(NSB_LIVE_HEADERS, nsbRowToArray(row));
+            const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
             const tbody = document.querySelector('#scanTable tbody');
             tbody.insertAdjacentHTML('beforeend', `<tr>${tds}</tr>`);
         }
 
-        function addScanResult(row) {
+        function addScanResult(row, render = true) {
             scanResultsCount++;
             updateBadge('scanCount', scanResultsCount);
             scanData.push(row);
-            renderScanRowOfficial(row);
+            if (render) renderScanRowOfficial(row);
         }
 
         function sortAndRenderScanResults() {
@@ -1461,12 +1639,14 @@
             currentTestingDC = dc;
             document.querySelector('#testTable tbody').innerHTML = '';
             document.getElementById('currentTestDC').textContent = `测试中: ${dc}`;
-            setStartLoading('终止测试');
             isTaskRunning = true;
+            runningTaskLabel = `官方优选 ${dc}`;
+            runningTaskMode = 'official';
+            runningTaskTab = 'test';
+            setStartLoading(getRunningButtonText());
             showDCSelection(dcList);
             if (!wsSend({ type: 'start_test', data: { dc, port, delay } })) {
-                isTaskRunning = false;
-                resetButton('✨ 重新开始扫描');
+                finishRunningTask('✨ 重新开始扫描');
                 alert('连接未就绪，请等待重连后再试');
                 return;
             }
@@ -1475,15 +1655,15 @@
 
         function renderTestRow(res) {
             const port = res.Port || parseInt(document.getElementById('testPort').value) || 443;
-            const row = `<tr><td><span class="copy-ip" onclick="copyToClipboard('${res.IP}', event)">${res.IP}</span></td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}">未测速</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')">测速</button></td></tr>`;
+            const row = `<tr><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}">未测速</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')">测速</button></td></tr>`;
             document.querySelector('#testTable tbody').insertAdjacentHTML('beforeend', row);
         }
 
-        function addTestResult(res) {
+        function addTestResult(res, render = true) {
             testResultsCount++;
             updateBadge('testCount', testResultsCount);
             testData.push(res);
-            renderTestRow(res);
+            if (render) renderTestRow(res);
         }
 
         function renderAllTestResults() {
@@ -1498,8 +1678,6 @@
             if (currentTestingDC) testedDCs.add(currentTestingDC);
             currentTestingDC = '';
             showDCSelection(dcList);
-            isTaskRunning = false;
-            resetButton('✨ 开始扫描与测试');
             const status = document.getElementById('currentTestDC');
             status.textContent = '测试完成';
         }
@@ -1633,7 +1811,7 @@
 
         function startTask() {
             if (isTaskRunning) {
-                if (confirm('确定要终止当前任务吗？')) {
+                if (confirm(getStopConfirmText())) {
                     if (!wsSend({ type: 'stop_task', data: {} })) {
                         alert('连接未就绪，无法发送停止命令');
                         return;
@@ -1657,7 +1835,10 @@
             const delay = parseInt(document.getElementById('testDelay').value) || 0;
 
             isTaskRunning = true;
-            setStartLoading('终止测试');
+            runningTaskLabel = '官方优选扫描';
+            runningTaskMode = 'official';
+            runningTaskTab = 'scan';
+            setStartLoading(getRunningButtonText());
             resetProgress();
             progressBox.style.display = 'block';
             renderScanHeaders('official');
@@ -1679,8 +1860,7 @@
             updateBadge('dcCount', 0);
 
             if (!wsSend({ type: 'start_task', data: { ipType, threads, port, delay } })) {
-                isTaskRunning = false;
-                resetButton('✨ 开始扫描与测试');
+                finishRunningTask('✨ 开始扫描与测试');
                 alert('连接未就绪，请等待重连后再试');
                 return;
             }
@@ -1702,6 +1882,7 @@
             const tlsMode = String(document.getElementById('nsbTls').value || 'on').toLowerCase();
             const enableTLS = tlsMode !== 'off';
             const delay = parseInt(document.getElementById('nsbDelay').value) || 0;
+            nsbCompactView = !!document.getElementById('nsbCompactView')?.checked;
 
             if (isNaN(speedTestInput) || speedTestInput < 0) {
                 alert('测速线程必须为非负整数');
@@ -1709,7 +1890,10 @@
             }
 
             isTaskRunning = true;
-            setStartLoading('终止测试', 'linear-gradient(135deg, var(--error-color), #dc2626)', '0 4px 12px rgba(239, 68, 68, 0.3), inset 0 1px 1px rgba(255,255,255,0.2)');
+            runningTaskLabel = '非标优选';
+            runningTaskMode = 'nsb';
+            runningTaskTab = 'scan';
+            setStartLoading(getRunningButtonText(), 'linear-gradient(135deg, var(--error-color), #dc2626)', '0 4px 12px rgba(239, 68, 68, 0.3), inset 0 1px 1px rgba(255,255,255,0.2)');
             renderScanHeaders('nsb');
             resetProgress();
             progressBox.style.display = 'block';
@@ -1736,8 +1920,7 @@
                     delay,
                 }
             })) {
-                isTaskRunning = false;
-                resetButton('✨ 开始扫描与测试');
+                finishRunningTask('✨ 开始扫描与测试');
                 alert('连接未就绪，请等待重连后再试');
             }
         }
@@ -1763,9 +1946,11 @@
             }
 
             if (!nsbRows.length) return alert('暂无可导出结果');
-            let csv = nsbHeaders.join(',') + '\n';
+            const exportHeaders = filterNSBHeaders(nsbHeaders);
+            let csv = exportHeaders.join(',') + '\n';
             nsbRows.forEach((r) => {
-                csv += r.map((c) => `"${String(c ?? '').replaceAll('"', '""')}"`).join(',') + '\n';
+                const row = filterNSBRow(nsbHeaders, r);
+                csv += row.map((c) => `"${String(c ?? '').replaceAll('"', '""')}"`).join(',') + '\n';
             });
             downloadCSV(csv, 'Cloudflare_NSB_Results');
         }
@@ -1800,14 +1985,13 @@
                     updateProgress(msg.data.current || 0, msg.data.total || 0, '扫描中');
                     break;
                 case 'scan_result':
-                    if (currentMode === 'official') addScanResult(msg.data);
+                    addScanResult(msg.data, currentMode === 'official' && runningTaskMode !== 'nsb');
                     break;
                 case 'scan_complete_wait_dc':
-                    isTaskRunning = false;
+                    finishRunningTask('✨ 重新开始扫描');
                     if (currentMode === 'official') {
                         sortAndRenderScanResults();
                         showDCSelection(msg.data);
-                        resetButton('✨ 重新开始扫描');
                         updateProgress(msg.data.length ? 100 : 0, 100, '扫描完成，选择数据中心');
                     }
                     break;
@@ -1817,14 +2001,14 @@
                     }
                     break;
                 case 'test_result':
-                    if (currentMode === 'official') addTestResult(msg.data);
+                    addTestResult(msg.data, currentMode === 'official' && document.getElementById('test').classList.contains('active'));
                     break;
                 case 'test_complete':
                     if (currentMode === 'official') {
                         testData = msg.data;
                         renderAllTestResults();
                         onTestComplete();
-                        resetButton('✨ 开始扫描与测试');
+                        finishRunningTask('✨ 开始扫描与测试');
                         updateProgress(msg.data.length, msg.data.length, '测试完成');
                     }
                     break;
@@ -1842,12 +2026,10 @@
                     }
                     break;
                 case 'nsb_scan_result':
-                    if (currentMode === 'nsb') {
-                        addNSBLiveResult(msg.data || {});
-                    }
+                    addNSBLiveResult(msg.data || {}, currentMode === 'nsb');
                     break;
                 case 'nsb_csv_complete':
-                    isTaskRunning = false;
+                    finishRunningTask('✨ 开始扫描与测试');
                     nsbHeaders = msg.data.headers || [];
                     nsbRows = msg.data.rows || [];
                     nsbLiveRows = [];
@@ -1858,16 +2040,15 @@
                     // 原因：虽然背景已改为绿色，但 animation: stripe 1s linear infinite 仍在生效，导致条纹持续闪烁、前进、消失重复
                     // 方案：立即停止动画（animation: none），其他代码完全不变
                     progressBar.style.animation = 'none';
-                    resetButton('✨ 开始扫描与测试');
                     log(`非标优选完成，已生成: ${msg.data.file}`);
                     break;
 
                 case 'task_stopped':
-                    isTaskRunning = false;
-                    resetButton('✨ 开始扫描与测试');
+                    finishRunningTask('✨ 开始扫描与测试');
                     finishCompactIPv4();
                     progressBar.style.background = 'var(--warning-color)';
                     progressBar.style.width = '100%';
+                    progressBar.style.animation = 'none';
                     progressBar.textContent = '已手动终止';
                     log('任务已手动终止');
                     break;
@@ -1876,11 +2057,11 @@
                     if (currentSpeedTestingIP) {
                         resetCurrentSpeedButton();
                     }
-                    isTaskRunning = false;
-                    resetButton('✨ 开始扫描与测试');
+                    finishRunningTask('✨ 开始扫描与测试');
                     finishCompactIPv4();
                     progressBar.style.background = 'var(--error-color)';
                     progressBar.style.width = '100%';
+                    progressBar.style.animation = 'none';
                     if (msg.data && (msg.data.toLowerCase().includes('cancel') || msg.data.toLowerCase().includes('stop'))) {
                         progressBar.textContent = '已手动终止';
                         progressBar.style.background = 'var(--warning-color)';
@@ -1911,12 +2092,12 @@
                     break;
                 case 'compact_ipv4_done':
                     flushCompactHits();
-                    isTaskRunning = false;
+                    finishRunningTask('✨ 开始扫描与测试');
                     finishCompactIPv4('✅');
                     setTimeout(() => finishCompactIPv4('🧹'), 3000);
-                    resetButton('✨ 开始扫描与测试');
                     progressBar.style.background = 'linear-gradient(to right, #10b981, #34d399)';
                     progressBar.style.width = '100%';
+                    progressBar.style.animation = 'none';
                     progressBar.textContent = `精简完成：保留 ${msg.data.count} 个子网`;
                     log(`IPv4 地址库精简完成：保留 ${msg.data.count} 个子网，已覆盖 ${msg.data.file}`);
                     break;
@@ -1924,8 +2105,7 @@
                     log(msg.data);
                     break;
                 case 'task_complete':
-                    isTaskRunning = false;
-                    resetButton('✨ 开始扫描与测试');
+                    finishRunningTask('✨ 开始扫描与测试');
                     updateProgress(100, 100, '完成');
                     break;
             }
