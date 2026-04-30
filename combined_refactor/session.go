@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 var globalRunningTasks int32
+var globalTaskMutex sync.Mutex
 
 func anyTaskRunning() bool {
 	return atomic.LoadInt32(&globalRunningTasks) > 0
@@ -102,11 +104,13 @@ func (s *appSession) cancelTask(withLog bool) {
 }
 
 func (s *appSession) beginTask(cancel context.CancelFunc) bool {
+	globalTaskMutex.Lock()
+	defer globalTaskMutex.Unlock()
+	s.taskMutex.Lock()
+	defer s.taskMutex.Unlock()
 	if anyTaskRunning() {
 		return false
 	}
-	s.taskMutex.Lock()
-	defer s.taskMutex.Unlock()
 	if s.isTaskRunning {
 		return false
 	}
@@ -117,6 +121,8 @@ func (s *appSession) beginTask(cancel context.CancelFunc) bool {
 }
 
 func (s *appSession) endTask() {
+	globalTaskMutex.Lock()
+	defer globalTaskMutex.Unlock()
 	s.taskMutex.Lock()
 	defer s.taskMutex.Unlock()
 	if s.isTaskRunning {

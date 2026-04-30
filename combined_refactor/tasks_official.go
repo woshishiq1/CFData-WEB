@@ -83,7 +83,7 @@ func scanOfficialIP(ctx context.Context, ip string, port int) *ScanResult {
 		DataCenter:  dataCenter,
 		Region:      loc.Region,
 		City:        loc.City,
-		LatencyStr:  fmt.Sprintf("%d ms", tcpDuration.Milliseconds()),
+		LatencyStr:  fmt.Sprintf("%dms", tcpDuration.Milliseconds()),
 		TCPDuration: tcpDuration,
 	}
 	return res

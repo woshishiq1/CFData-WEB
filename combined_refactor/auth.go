@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -163,7 +164,7 @@ func handleLoginPost(w http.ResponseWriter, r *http.Request) {
 		pass = r.FormValue("password")
 	}
 
-	if user != webUser || pass != webPassword {
+	if !constantTimeEqual(user, webUser) || !constantTimeEqual(pass, webPassword) {
 		if c, err := r.Cookie(sessionCookieName); err == nil {
 			deleteAuthSession(c.Value)
 		}
@@ -192,6 +193,10 @@ func handleLoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func constantTimeEqual(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -22,7 +23,9 @@ const (
 
 var (
 	//go:embed index.html login.html
-	staticFiles embed.FS
+	staticFiles     embed.FS
+	customDNSServer string
+	customResolver  *net.Resolver
 )
 
 type location struct {
@@ -88,6 +91,8 @@ type iptestResult struct {
 	kex           string
 	timestamp     string
 	downloadSpeed float64
+	speedText     string
+	speedTested   bool
 }
 
 type nsbScanMessage struct {

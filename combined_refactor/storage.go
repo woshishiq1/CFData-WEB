@@ -14,6 +14,13 @@ import (
 
 var upstreamHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
+func configureHTTPClients() {
+	initCustomResolver()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = dialContext
+	upstreamHTTPClient.Transport = transport
+}
+
 func initLocations() {
 	filename := "locations.json"
 	url := "https://www.baipiao.eu.org/cloudflare/locations"

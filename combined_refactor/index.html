@@ -834,11 +834,15 @@
         .upload-status.error {
             color: var(--error-color);
             border-color: var(--error-color);
+            /* 修改点：增加加粗，让失败提示更明显 */
+            font-weight: bold;
         }
 
         .upload-status.success {
             color: #059669;
             border-color: #10b981;
+            /* 修改点：增加加粗，让上传中和上传完成提示更醒目 */
+            font-weight: bold;
         }
 
         .upload-status .copy-ip {
@@ -921,6 +925,11 @@
 
         @media (max-width: 768px) {
 
+            /* 修改点：针对移动端竖屏，将结果操作弹窗由双列改为单列，修复排版挤压异常 */
+            .modal-grid {
+                grid-template-columns: 1fr;
+            }
+
             .controls,
             .container {
                 padding: 12px;
@@ -989,7 +998,13 @@
     <div class="container">
         <h1>Cloudflare IP Data</h1>
         <div class="top-actions">
-            <a class="github-link" href="https://github.com/PoemMisty/CFData-WEB" target="_blank" rel="noopener noreferrer" title="打开 GitHub 仓库">GitHub</a>
+            <a class="github-link" href="https://github.com/PoemMisty/CFData-WEB" target="_blank"
+                rel="noopener noreferrer" title="打开 GitHub 仓库" aria-label="打开 GitHub 仓库">
+                <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="currentColor">
+                    <path
+                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.65 7.65 0 0 1 8 3.86c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+                </svg>
+            </a>
             <button class="settings-toggle" id="settingsToggle" onclick="toggleSettingsMenu(event)" title="设置">
                 <span id="themeIcon">⚙️</span>
             </button>
@@ -1073,39 +1088,62 @@
                             onclick="startCompactIPv4()">🧹</button>
                     </div>
                 </div>
+                <div class="option-item full-width">
+                    <span class="label">⬆ 自动上传</span>
+                    <select id="officialAutoUploadAccount"></select>
+                </div>
             </div>
 
             <div id="nsbControls" class="hidden">
                 <div class="control-title">
                     <span>非标参数</span>
-                    <span style="font-size:12px;color:var(--text-secondary);">支持上传 txt/csv 文件或填写网络 URL（二选一）；若识别失败，请整理为每行一个目标，格式：IP 空格 端口，例如 1.2.3.4 443</span>
+                    <span style="font-size:12px;color:var(--text-secondary);">支持上传 txt/csv 文件或填写网络
+                        URL（二选一）；若识别失败，请整理为每行一个目标，格式：IP 空格 端口，例如 1.2.3.4 443</span>
                 </div>
                 <div class="option-item full-width">
                     <span class="label">📄 选择 IP 文件</span>
-                    <input id="ipFileInput" type="file" accept=".txt,.csv,text/plain" onchange="syncNSBInputMode('file')">
+                    <input id="ipFileInput" type="file" accept=".txt,.csv,text/plain"
+                        onchange="syncNSBInputMode('file')">
                 </div>
                 <div class="option-item full-width">
                     <span class="label">🌐 网络 URL</span>
-                    <input id="nsbSourceUrl" type="url" placeholder="https://example.com/ip-list.txt" oninput="syncNSBInputMode('url')">
+                    <input id="nsbSourceUrl" type="url" placeholder="https://example.com/ip-list.txt"
+                        oninput="syncNSBInputMode('url')">
                 </div>
                 <div class="option-item">
                     <span class="label">🚀 并发数</span>
                     <input id="nsbThreads" type="number" value="100" placeholder="默认 100">
                 </div>
                 <div class="option-item">
+                    <span class="label">🎯 数据中心</span>
+                    <input id="nsbTargetDC" type="text" value="" placeholder="留空不限制，如 NRT">
+                </div>
+                <div class="option-item">
                     <span class="label">⏱️ 延迟阈值 (ms)</span>
                     <input id="nsbDelay" type="number" value="0" placeholder="默认 0">
                 </div>
                 <div class="option-item">
+                    <span class="label">🎯 结果上限</span>
+                    <input id="nsbResultLimit" type="number" value="1000" placeholder="非 0 正整数">
+                </div>
+                <div class="option-item">
+                    <span class="label">📉 测速阈值</span>
+                    <input id="nsbSpeedMin" type="number" value="0.1" step="0.01" placeholder="默认 0.1MB/s">
+                </div>
+                <div class="option-item">
+                    <span class="label">🏁 测速上限</span>
+                    <input id="nsbSpeedLimit" type="number" value="20" placeholder="0 关闭测速">
+                </div>
+                <div class="option-item">
                     <span class="label">🧪 开启测速</span>
                     <select id="enableSpeedTest" onchange="updateNSBSpeedControls()">
-                        <option value="on" selected>开启</option>
-                        <option value="off">关闭</option>
+                        <option value="on">开启</option>
+                        <option value="off" selected>关闭</option>
                     </select>
                 </div>
                 <div class="option-item">
                     <span class="label">⚡ 测速线程</span>
-                    <input id="nsbSpeedTest" type="number" value="5" placeholder="默认 5">
+                    <input id="nsbSpeedTest" type="number" value="0" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
                     <span class="label">🔗 TLS 模式</span>
@@ -1126,6 +1164,10 @@
                         <button class="mini-action-btn" title="恢复默认测速网站"
                             onclick="resetDefaultSpeedUrl('nsbSpeedUrl')">↺</button>
                     </div>
+                </div>
+                <div class="option-item full-width">
+                    <span class="label">⬆ 自动上传</span>
+                    <select id="nsbAutoUploadAccount"></select>
                 </div>
             </div>
 
@@ -1169,7 +1211,8 @@
                 <h3 style="display:flex;justify-content:space-between;align-items:center;">
                     <span>扫描结果 <span class="badge" id="scanCount">0</span></span>
                     <span class="table-actions">
-                        <label id="nsbCompactToggleWrap" class="compact-toggle"><input id="nsbCompactView" type="checkbox" checked onchange="setNSBCompactView(this.checked)"> 精简表格</label>
+                        <label id="nsbCompactToggleWrap" class="compact-toggle"><input id="nsbCompactView"
+                                type="checkbox" checked onchange="setNSBCompactView(this.checked)"> 精简表格</label>
                         <button class="action-btn export-btn" onclick="openResultModal('scan')">📥 结果操作</button>
                     </span>
                 </h3>
@@ -1227,79 +1270,88 @@
                 <button class="modal-close" onclick="closeResultModal()">×</button>
             </div>
             <div class="modal-body">
-            <div class="modal-grid">
-                <div class="modal-field">
-                    <label>文件格式</label>
-                    <select id="resultFormat" onchange="handleResultFormatChange()">
-                        <option value="csv">CSV</option>
-                        <option value="txt">TXT</option>
-                    </select>
-                </div>
-                <div class="modal-field">
-                    <label>文件名</label>
-                    <input id="resultFileName" type="text" value="cfdata-results">
-                </div>
-                <div class="modal-field full">
-                    <label>字段选择</label>
-                    <div class="field-picker" id="resultFieldPicker"></div>
-                </div>
-                <div class="modal-field full">
-                    <label>输出顺序</label>
-                    <div class="order-list" id="resultOrderList"></div>
-                </div>
-                <div class="modal-field github-field">
-                    <label>GitHub 账户</label>
-                    <div class="github-account-row">
-                        <select id="githubAccountSelect" onchange="loadSelectedGitHubAccount()"></select>
-                        <button class="action-btn" onclick="deleteSelectedGitHubAccount()">删除</button>
+                <div class="modal-grid">
+                    <div class="modal-field">
+                        <label>文件格式</label>
+                        <select id="resultFormat" onchange="handleResultFormatChange()">
+                            <option value="csv">CSV</option>
+                            <option value="txt">TXT</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label>文件名</label>
+                        <input id="resultFileName" type="text" value="cfdata-results">
+                    </div>
+                    <div class="modal-field">
+                        <label>开始行</label>
+                        <input id="resultStartRow" type="number" value="1" min="1" oninput="updateResultPreview()">
+                    </div>
+                    <div class="modal-field">
+                        <label>结束行</label>
+                        <input id="resultEndRow" type="number" value="20" min="1" oninput="updateResultPreview()">
+                    </div>
+                    <div class="modal-field full">
+                        <label>字段选择</label>
+                        <div class="field-picker" id="resultFieldPicker"></div>
+                    </div>
+                    <div class="modal-field full">
+                        <label>输出顺序</label>
+                        <div class="order-list" id="resultOrderList"></div>
+                    </div>
+                    <div class="modal-field github-field">
+                        <label>GitHub 账户</label>
+                        <div class="github-account-row">
+                            <select id="githubAccountSelect" onchange="loadSelectedGitHubAccount()"></select>
+                            <button class="action-btn" onclick="deleteSelectedGitHubAccount()">删除</button>
+                        </div>
+                    </div>
+                    <div class="modal-field github-field">
+                        <label>账户名称</label>
+                        <input id="githubAccountName" type="text" placeholder="例如 main-account">
+                    </div>
+                    <div class="modal-field github-field">
+                        <label>GitHub Token</label>
+                        <input id="githubToken" type="password" autocomplete="off" placeholder="repo 权限 token">
+                    </div>
+                    <div class="modal-field github-field">
+                        <label>仓库 owner/repo</label>
+                        <input id="githubRepo" type="text" placeholder="owner/repo">
+                    </div>
+                    <div class="modal-field github-field">
+                        <label>分支</label>
+                        <input id="githubBranch" type="text" value="main">
+                    </div>
+                    <div class="modal-field github-field">
+                        <label>目标路径</label>
+                        <input id="githubPath" type="text" placeholder="results/ip.csv 或 results/ip.txt">
+                    </div>
+                    <div class="modal-field full github-field">
+                        <label>提交信息</label>
+                        <input id="githubMessage" type="text" value="update cfdata results">
+                    </div>
+                    <div class="modal-field full github-field">
+                        <label class="inline-check"><input id="githubSaveToken" type="checkbox"> 保存 token 到本机浏览器（使用
+                            WebCrypto 加密存储，同时保存 SHA-256 指纹）</label>
+                    </div>
+                    <div class="modal-field full github-field">
+                        <label>快速上传指定文件（不使用上方结果内容）</label>
+                        <input id="githubQuickFile" type="file" accept=".txt,.csv,text/plain,text/csv">
+                    </div>
+                    <div class="modal-field full">
+                        <label>输出示例</label>
+                        <pre class="result-preview" id="resultPreview">暂无预览</pre>
+                    </div>
+                    <div class="modal-field full github-field">
+                        <label>上传状态</label>
+                        <div class="upload-status" id="githubUploadStatus">等待上传</div>
                     </div>
                 </div>
-                <div class="modal-field github-field">
-                    <label>账户名称</label>
-                    <input id="githubAccountName" type="text" placeholder="例如 main-account">
+                <div class="modal-actions">
+                    <button class="action-btn" onclick="selectResultFields(true)">全选</button>
+                    <button class="action-btn" onclick="selectResultFields(false)">仅 IP:PORT</button>
+                    <button class="action-btn export-btn" onclick="downloadSelectedResults()">导出文件</button>
+                    <button class="action-btn export-btn" onclick="uploadSelectedResultsToGitHub()">上传 GitHub</button>
                 </div>
-                <div class="modal-field github-field">
-                    <label>GitHub Token</label>
-                    <input id="githubToken" type="password" autocomplete="off" placeholder="repo 权限 token">
-                </div>
-                <div class="modal-field github-field">
-                    <label>仓库 owner/repo</label>
-                    <input id="githubRepo" type="text" placeholder="owner/repo">
-                </div>
-                <div class="modal-field github-field">
-                    <label>分支</label>
-                    <input id="githubBranch" type="text" value="main">
-                </div>
-                <div class="modal-field github-field">
-                    <label>目标路径</label>
-                    <input id="githubPath" type="text" placeholder="results/ip.csv 或 results/ip.txt">
-                </div>
-                <div class="modal-field full github-field">
-                    <label>提交信息</label>
-                    <input id="githubMessage" type="text" value="update cfdata results">
-                </div>
-                <div class="modal-field full github-field">
-                    <label class="inline-check"><input id="githubSaveToken" type="checkbox"> 保存 token 到本机浏览器（同时保存 SHA-256 指纹用于识别，多账户可选）</label>
-                </div>
-                <div class="modal-field full github-field">
-                    <label>快速上传指定文件（不使用上方结果内容）</label>
-                    <input id="githubQuickFile" type="file" accept=".txt,.csv,text/plain,text/csv">
-                </div>
-                <div class="modal-field full">
-                    <label>输出示例</label>
-                    <pre class="result-preview" id="resultPreview">暂无预览</pre>
-                </div>
-                <div class="modal-field full github-field">
-                    <label>上传状态</label>
-                    <div class="upload-status" id="githubUploadStatus">等待上传</div>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button class="action-btn" onclick="selectResultFields(true)">全选</button>
-                <button class="action-btn" onclick="selectResultFields(false)">仅 ip:port</button>
-                <button class="action-btn export-btn" onclick="downloadSelectedResults()">导出文件</button>
-                <button class="action-btn export-btn" onclick="uploadSelectedResultsToGitHub()">上传 GitHub</button>
-            </div>
             </div>
         </div>
     </div>
@@ -1330,6 +1382,8 @@
         let resultModalMode = 'scan';
         let resultFieldOrder = [];
         const githubAccountStorageKey = 'cfdata-github-accounts';
+        const githubSessionTokens = new Map();
+        const githubTokenCryptoSalt = 'cfdata-github-token-v1';
 
         const LATENCY_GREEN = 100;
         const LATENCY_YELLOW = 200;
@@ -1449,7 +1503,7 @@
             const speedTestInput = document.getElementById('nsbSpeedTest');
             if (!enableSpeedTest || !speedTestInput) return;
 
-            const speedEnabled = String(enableSpeedTest.value || 'on').toLowerCase() === 'on';
+            const speedEnabled = String(enableSpeedTest.value || 'off').toLowerCase() === 'on';
             if (speedEnabled) {
                 speedTestInput.disabled = false;
                 if (String(speedTestInput.value).trim() === '0') {
@@ -2194,7 +2248,7 @@
             }
 
             const maxThreads = parseInt(document.getElementById('nsbThreads').value) || 100;
-            const speedEnabled = String(document.getElementById('enableSpeedTest').value || 'on').toLowerCase() === 'on';
+            const speedEnabled = String(document.getElementById('enableSpeedTest').value || 'off').toLowerCase() === 'on';
             const speedTestInput = parseInt(document.getElementById('nsbSpeedTest').value) || 0;
             const speedURL = document.getElementById('nsbSpeedUrl').value.trim() || defaultSpeedTestUrl;
             const outFile = document.getElementById('nsbOutFile').value.trim() || 'ip.csv';
@@ -2202,10 +2256,18 @@
             const tlsMode = String(document.getElementById('nsbTls').value || 'on').toLowerCase();
             const enableTLS = tlsMode !== 'off';
             const delay = parseInt(document.getElementById('nsbDelay').value) || 0;
+            const resultLimit = parseInt(document.getElementById('nsbResultLimit').value) || 0;
+            const targetDC = document.getElementById('nsbTargetDC').value.trim();
+            const speedMin = parseFloat(document.getElementById('nsbSpeedMin').value) || 0;
+            const speedLimit = parseInt(document.getElementById('nsbSpeedLimit').value) || 0;
             nsbCompactView = !!document.getElementById('nsbCompactView')?.checked;
 
             if (isNaN(speedTestInput) || speedTestInput < 0) {
                 alert('测速线程必须为非负整数');
+                return;
+            }
+            if (resultLimit <= 0) {
+                alert('延迟结果上限必须填写非 0 正整数');
                 return;
             }
 
@@ -2239,6 +2301,10 @@
                     speedURL,
                     enableTLS,
                     delay,
+                    resultLimit,
+                    dc: targetDC,
+                    speedMin,
+                    speedLimit,
                 }
             })) {
                 finishRunningTask('✨ 开始扫描与测试');
@@ -2256,7 +2322,7 @@
         }
 
         const RESULT_FIELDS = [
-            { key: 'ipport', label: 'ip:port', txt: true },
+            { key: 'ipport', label: 'IP:PORT', txt: true },
             { key: 'ip', label: 'IP地址' },
             { key: 'port', label: '端口号' },
             { key: 'tls', label: 'TLS' },
@@ -2355,15 +2421,41 @@
 
         function renderGitHubAccounts() {
             const select = document.getElementById('githubAccountSelect');
-            if (!select) return;
             const accounts = getGitHubAccounts();
-            select.innerHTML = '<option value="">新账户/不使用保存配置</option>' + accounts.map((a, i) => `<option value="${i}">${escapeHTML(a.name || a.repo || 'GitHub账户')} ${a.tokenHash ? '(' + escapeHTML(a.tokenHash.slice(0, 10)) + ')' : ''}</option>`).join('');
+            const accountOptions = '<option value="">新账户/不使用保存配置</option>' + accounts.map((a, i) => `<option value="${i}">${escapeHTML(a.name || a.repo || 'GitHub账户')} ${a.tokenHash ? '(' + escapeHTML(a.tokenHash.slice(0, 10)) + ')' : ''}</option>`).join('');
+            if (select) select.innerHTML = accountOptions;
+            const autoSelect = document.getElementById('nsbAutoUploadAccount');
+            if (autoSelect) autoSelect.innerHTML = '<option value="">关闭自动上传</option>' + accounts.map((a, i) => `<option value="${i}:txt">${escapeHTML(a.name || a.repo || 'GitHub账户')} - TXT</option><option value="${i}:csv">${escapeHTML(a.name || a.repo || 'GitHub账户')} - CSV</option>`).join('');
+            const officialAutoSelect = document.getElementById('officialAutoUploadAccount');
+            if (officialAutoSelect) officialAutoSelect.innerHTML = '<option value="">关闭自动上传</option>' + accounts.map((a, i) => `<option value="${i}:txt">${escapeHTML(a.name || a.repo || 'GitHub账户')} - TXT</option><option value="${i}:csv">${escapeHTML(a.name || a.repo || 'GitHub账户')} - CSV</option>`).join('');
+        }
+
+        function normalizeGitHubAccountKey(account) {
+            return account?.name || account?.repo || '';
+        }
+
+        async function migrateLegacyGitHubToken(account, idx) {
+            if (!account || !account.token) return '';
+            const token = String(account.token || '');
+            const accounts = getGitHubAccounts();
+            const current = accounts[idx];
+            if (!current) return token;
+            delete current.token;
+            current.tokenHash = current.tokenHash || await sha256Hex(token);
+            current.tokenCipher = current.tokenCipher || await encryptGitHubToken(normalizeGitHubAccountKey(current), token);
+            saveGitHubAccounts(accounts);
+            githubSessionTokens.set(normalizeGitHubAccountKey(current), token);
+            renderGitHubAccounts();
+            return token;
         }
 
         function loadSelectedGitHubAccount() {
             const select = document.getElementById('githubAccountSelect');
             const idx = parseInt(select.value, 10);
-            if (Number.isNaN(idx)) return;
+            if (Number.isNaN(idx)) {
+                clearGitHubAccountInputs();
+                return;
+            }
             const account = getGitHubAccounts()[idx];
             if (!account) return;
             document.getElementById('githubAccountName').value = account.name || '';
@@ -2371,8 +2463,33 @@
             document.getElementById('githubBranch').value = account.branch || 'main';
             document.getElementById('githubPath').value = account.path || '';
             document.getElementById('githubMessage').value = account.message || 'update cfdata results';
-            document.getElementById('githubToken').value = account.token || '';
-            document.getElementById('githubSaveToken').checked = !!account.token;
+            const accountKey = normalizeGitHubAccountKey(account);
+            const sessionToken = githubSessionTokens.get(accountKey) || '';
+            document.getElementById('githubToken').value = sessionToken;
+            document.getElementById('githubSaveToken').checked = !!account.tokenCipher || !!account.token || githubSessionTokens.has(accountKey);
+            if (!sessionToken && account.token) {
+                migrateLegacyGitHubToken(account, idx).then((token) => {
+                    if (token && document.getElementById('githubAccountSelect').value === String(idx)) {
+                        document.getElementById('githubToken').value = token;
+                    }
+                });
+            } else if (!sessionToken && account.tokenCipher) {
+                decryptStoredGitHubToken(account).then((token) => {
+                    if (token) {
+                        githubSessionTokens.set(accountKey, token);
+                        if (document.getElementById('githubAccountSelect').value === String(idx)) {
+                            document.getElementById('githubToken').value = token;
+                        }
+                    }
+                });
+            }
+        }
+
+        function clearGitHubAccountInputs() {
+            ['githubAccountName', 'githubRepo', 'githubPath', 'githubToken'].forEach((id) => document.getElementById(id).value = '');
+            document.getElementById('githubBranch').value = 'main';
+            document.getElementById('githubMessage').value = 'update cfdata results';
+            document.getElementById('githubSaveToken').checked = false;
         }
 
         function deleteSelectedGitHubAccount() {
@@ -2380,6 +2497,8 @@
             const idx = parseInt(select.value, 10);
             if (Number.isNaN(idx)) return;
             const accounts = getGitHubAccounts();
+            const deleted = accounts[idx];
+            if (deleted) githubSessionTokens.delete(normalizeGitHubAccountKey(deleted));
             accounts.splice(idx, 1);
             saveGitHubAccounts(accounts);
             renderGitHubAccounts();
@@ -2392,10 +2511,45 @@
             return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
         }
 
+        function bytesToBase64(bytes) {
+            return btoa(String.fromCharCode(...bytes));
+        }
+
+        function base64ToBytes(text) {
+            return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+        }
+
+        async function getGitHubTokenCryptoKey(accountName) {
+            if (!crypto.subtle) return null;
+            const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(`${location.origin}|${accountName}|${githubTokenCryptoSalt}`), 'PBKDF2', false, ['deriveKey']);
+            return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: new TextEncoder().encode(githubTokenCryptoSalt), iterations: 120000, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+        }
+
+        async function encryptGitHubToken(accountName, token) {
+            const key = await getGitHubTokenCryptoKey(accountName);
+            if (!key) return '';
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(token));
+            return `${bytesToBase64(iv)}.${bytesToBase64(new Uint8Array(cipher))}`;
+        }
+
+        async function decryptStoredGitHubToken(account) {
+            try {
+                if (!account.tokenCipher) return '';
+                const [ivText, cipherText] = account.tokenCipher.split('.');
+                const key = await getGitHubTokenCryptoKey(account.name || account.repo || '');
+                if (!key) return '';
+                const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(ivText) }, key, base64ToBytes(cipherText));
+                return new TextDecoder().decode(plain);
+            } catch (_) {
+                return '';
+            }
+        }
+
         async function saveCurrentGitHubAccount(payload) {
             const name = document.getElementById('githubAccountName').value.trim() || payload.repo;
             if (!name) return;
-            const saveToken = document.getElementById('githubSaveToken').checked;
+            const rememberToken = document.getElementById('githubSaveToken').checked;
             const accounts = getGitHubAccounts();
             const tokenHash = await sha256Hex(payload.token);
             const next = {
@@ -2405,8 +2559,16 @@
                 path: payload.path,
                 message: payload.message,
                 tokenHash,
-                token: saveToken ? payload.token : '',
             };
+            if (rememberToken) {
+                githubSessionTokens.set(name, payload.token);
+                next.tokenCipher = await encryptGitHubToken(name, payload.token);
+                if (!next.tokenCipher) {
+                    alert('当前浏览器不支持 WebCrypto，无法安全保存 token；本次仍会上传，但不会持久保存 token');
+                }
+            } else {
+                githubSessionTokens.delete(name);
+            }
             const existing = accounts.findIndex((a) => a.name === name);
             if (existing >= 0) accounts[existing] = next;
             else accounts.push(next);
@@ -2450,27 +2612,30 @@
 
         function testResultToObject(r) {
             const port = r.Port || parseInt(document.getElementById('testPort').value) || 443;
-            return { ip: r.IP || '', port: String(port), ipport: `${r.IP || ''}:${port}`, latency: `${(r.AvgLatency / 1_000_000).toFixed(0)} ms`, speed: r.Speed || '未测速' };
+            return { ip: r.IP || '', port: String(port), ipport: `${r.IP || ''}:${port}`, latency: `${(r.AvgLatency / 1_000_000).toFixed(0)}ms`, speed: r.Speed || '未测速' };
         }
 
         function getNSBResultObjects() {
             const sourceHeaders = nsbHeaders.length ? nsbHeaders : NSB_LIVE_HEADERS;
             const sourceRows = nsbRows.length ? nsbRows : nsbLiveRows.map(nsbRowToArray);
+            const normalizedHeaders = sourceHeaders.map(normalizeNSBHeader);
+            const ipIndex = normalizedHeaders.indexOf('IP地址');
+            const portIndex = normalizedHeaders.indexOf('端口号');
             return sourceRows.map((row) => {
                 const obj = {};
-                sourceHeaders.map(normalizeNSBHeader).forEach((header, idx) => {
+                normalizedHeaders.forEach((header, idx) => {
                     const field = RESULT_FIELDS.find((f) => f.label === header);
                     if (field) obj[field.key] = row[idx] ?? '';
                 });
-                obj.ip = obj.ip || row[sourceHeaders.map(normalizeNSBHeader).indexOf('IP地址')] || '';
-                obj.port = obj.port || row[sourceHeaders.map(normalizeNSBHeader).indexOf('端口号')] || '';
+                obj.ip = obj.ip || (ipIndex >= 0 ? row[ipIndex] : '') || '';
+                obj.port = obj.port || (portIndex >= 0 ? row[portIndex] : '') || '';
                 obj.ipport = `${obj.ip}:${obj.port}`;
                 return obj;
             });
         }
 
         function buildSelectedResultContent(format) {
-            const rows = getCurrentResultRows(resultModalMode);
+            const rows = getSelectedResultRows();
             if (!rows.length) throw new Error('暂无可操作结果');
             const fields = resultFieldOrder.length ? resultFieldOrder : getDefaultResultFieldOrder(format);
             if (format === 'txt') {
@@ -2482,12 +2647,25 @@
             }
             const byKey = Object.fromEntries(RESULT_FIELDS.map((f) => [f.key, f]));
             const headers = fields.map((k) => byKey[k]?.label || k);
-            const body = rows.map((r) => fields.map((k) => `"${String(r[k] ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
+            const body = rows.map((r) => fields.map((k) => formatCSVCell(r[k])).join(',')).join('\n');
             return headers.join(',') + '\n' + body + '\n';
         }
 
-        function buildResultPreview(format) {
+        function getSelectedResultRows() {
             const rows = getCurrentResultRows(resultModalMode);
+            const start = Math.max(1, parseInt(document.getElementById('resultStartRow')?.value || '1', 10) || 1);
+            const end = Math.max(start, parseInt(document.getElementById('resultEndRow')?.value || '20', 10) || 20);
+            return rows.slice(start - 1, end);
+        }
+
+        function formatCSVCell(value) {
+            const text = String(value ?? '');
+            if (/[",\n\r]/.test(text)) return `"${text.replaceAll('"', '""')}"`;
+            return text;
+        }
+
+        function buildResultPreview(format) {
+            const rows = getSelectedResultRows();
             if (!rows.length) return '暂无预览';
             const fields = resultFieldOrder.length ? resultFieldOrder : getDefaultResultFieldOrder(format);
             const first = rows[0];
@@ -2498,7 +2676,7 @@
             }
             const byKey = Object.fromEntries(RESULT_FIELDS.map((f) => [f.key, f]));
             const headers = fields.map((k) => byKey[k]?.label || k).join(',');
-            const values = fields.map((k) => `"${String(first[k] ?? '').replaceAll('"', '""')}"`).join(',');
+            const values = fields.map((k) => formatCSVCell(first[k])).join(',');
             return `${headers}\n${values}`;
         }
 
@@ -2564,20 +2742,68 @@
             };
             if (!payload.token || !payload.path) return alert('Token 和目标路径不能为空');
             await saveCurrentGitHubAccount(payload);
-            setGitHubUploadStatus(`上传中: ${quickFile ? quickFile.name : payload.path}`);
+            /* 修改点：给“上传中”也加上 'success' 类，配合 CSS 实现绿色加粗 */
+            setGitHubUploadStatus(`上传中: ${quickFile ? quickFile.name : payload.path}`, 'success');
             wsSend({ type: 'github_upload', data: payload });
             log('已提交 GitHub 上传请求');
         }
 
+        async function autoUploadNSBResults() {
+            const value = document.getElementById('nsbAutoUploadAccount')?.value || '';
+            await autoUploadResults(value, 'scan', '自动上传已提交');
+        }
+
+        async function autoUploadOfficialResults() {
+            const value = document.getElementById('officialAutoUploadAccount')?.value || '';
+            await autoUploadResults(value, 'test', '官方自动上传已提交');
+        }
+
+        async function autoUploadResults(value, mode, logPrefix) {
+            if (!value) return;
+            const [idxText, format] = value.split(':');
+            const idx = parseInt(idxText, 10);
+            const account = getGitHubAccounts()[idx];
+            const accountKey = normalizeGitHubAccountKey(account);
+            let token = githubSessionTokens.get(accountKey) || '';
+            if (!token && account?.token) {
+                token = await migrateLegacyGitHubToken(account, idx);
+            } else if (!token && account?.tokenCipher) {
+                token = await decryptStoredGitHubToken(account);
+                if (token) githubSessionTokens.set(accountKey, token);
+            }
+            if (!account || !token || !account.repo) {
+                log('自动上传失败: 已保存账户缺少 token 或仓库配置');
+                return;
+            }
+            const oldMode = resultModalMode;
+            const oldOrder = resultFieldOrder.slice();
+            resultModalMode = mode;
+            resultFieldOrder = getDefaultResultFieldOrder(format || 'txt');
+            const repoParts = account.repo.split('/');
+            const path = (account.path || `results/ip.${format || 'txt'}`).replace(/\.(csv|txt)$/i, `.${format || 'txt'}`);
+            const payload = {
+                token,
+                owner: repoParts[0], repo: repoParts[1],
+                branch: account.branch || 'main',
+                path,
+                message: account.message || 'update cfdata results',
+                content: buildSelectedResultContent(format || 'txt'),
+            };
+            resultModalMode = oldMode;
+            resultFieldOrder = oldOrder;
+            wsSend({ type: 'github_upload', data: payload });
+            log(`${logPrefix}: ${account.name || account.repo} ${format || 'txt'}`);
+        }
+
         function downloadFile(content, nameBase, ext) {
-			const timestamp = new Date().toISOString().replace(/[-:T]/g, '').split('.')[0];
-			const mime = ext === 'csv' ? 'text/csv;charset=utf-8;' : 'text/plain;charset=utf-8;';
-			const blob = new Blob(["\uFEFF" + content], { type: mime });
-			const link = document.createElement('a');
-			link.href = URL.createObjectURL(blob);
-			link.download = `${nameBase}_${timestamp}.${ext}`;
-			link.click();
-		}
+            const timestamp = new Date().toISOString().replace(/[-:T]/g, '').split('.')[0];
+            const mime = ext === 'csv' ? 'text/csv;charset=utf-8;' : 'text/plain;charset=utf-8;';
+            const blob = new Blob(["\uFEFF" + content], { type: mime });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${nameBase}_${timestamp}.${ext}`;
+            link.click();
+        }
 
         function handleMessage(msg) {
             switch (msg.type) {
@@ -2615,6 +2841,7 @@
                         onTestComplete();
                         finishRunningTask('✨ 开始扫描与测试');
                         updateProgress(msg.data.length, msg.data.length, '测试完成');
+                        autoUploadOfficialResults();
                     }
                     break;
                 case 'speed_test_result':
@@ -2624,7 +2851,7 @@
                     setGitHubUploadStatus(`上传完成: ${msg.data.rawURL || msg.data.path || ''}`, 'success');
                     renderRawURLCopy(msg.data.rawURL || '');
                     log(`GitHub 上传完成: ${msg.data.rawURL || msg.data.path || ''}`);
-                    alert(`GitHub 上传完成\n${msg.data.rawURL || msg.data.path || ''}`);
+                    alert(`GitHub 上传完成\n${msg.data.path || ''}`);
                     break;
 
                 case 'nsb_progress':
@@ -2652,6 +2879,7 @@
                     // 方案：立即停止动画（animation: none），其他代码完全不变
                     progressBar.style.animation = 'none';
                     log(`非标优选完成，已生成: ${msg.data.file}`);
+                    autoUploadNSBResults();
                     break;
 
                 case 'task_stopped':
@@ -2743,6 +2971,7 @@
         window.addEventListener('DOMContentLoaded', () => {
             connect();
             initializeUI();
+            renderGitHubAccounts();
             switchMode('official');
             initThemeFromStorage();
         });

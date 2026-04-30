@@ -13,7 +13,7 @@ import (
 
 var webUser, webPassword string
 var webSessionMinutes int
-var boolFlagNames = []string{"cli", "tls", "progress", "debug", "nocolor", "compactipv4", "compact"}
+var boolFlagNames = []string{"cli", "tls", "progress", "debug", "nocolor", "compactipv4", "compact", "github"}
 
 func rewriteBoolFlagArgs() {
 	if len(os.Args) <= 2 {
@@ -74,12 +74,23 @@ func main() {
 
 	flag.IntVar(&listenPort, "port", 13335, "服务监听端口")
 	flag.StringVar(&speedTestURL, "url", "speed.cloudflare.com/__down?bytes=99999999", "测速下载地址（不含协议前缀）")
-	flag.IntVar(&speedTestWorkers, "speedtest", 5, "默认测速并发")
+	flag.StringVar(&customDNSServer, "dns", "", "自定义 DNS 服务器，例如 1.1.1.1 或 8.8.8.8:53；留空使用系统 DNS")
 	flag.BoolVar(&debugMode, "debug", false, "开启调试输出（导出失败明细 CSV）")
 	flag.StringVar(&webUser, "user", "", "Web 认证用户名（不设置则不启用认证）")
 	flag.StringVar(&webPassword, "password", "", "Web 认证密码（需同时设置 -user）")
 	flag.IntVar(&webSessionMinutes, "session", 720, "Web 登录会话有效期（分钟）")
 	flag.Parse()
+	if cliCfg.enabled {
+		if err := prepareCLIConfig(cliCfg); err != nil {
+			if errors.Is(err, errCLIConfigCreated) {
+				return
+			}
+			fmt.Printf("CLI 执行失败: %v\n", err)
+			return
+		}
+	}
+	speedTestWorkers = cliCfg.speedTest
+	configureHTTPClients()
 	if webSessionMinutes <= 0 {
 		webSessionMinutes = 720
 	}
@@ -88,9 +99,6 @@ func main() {
 	initLocations()
 	if cliCfg.enabled {
 		if err := runCLI(cliCfg); err != nil {
-			if errors.Is(err, errCLIConfigCreated) {
-				return
-			}
 			fmt.Printf("CLI 执行失败: %v\n", err)
 		}
 		return

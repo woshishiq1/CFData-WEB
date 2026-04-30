@@ -1,15 +1,15 @@
 package main
 
 import (
-    "context"
-    "fmt"
-    "io"
-    "net"
-    "net/http"
-    "net/url"
-    "strconv"
-    "strings"
-    "time"
+	"context"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func isTLSPort(port int) bool {
@@ -26,7 +26,8 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 	if customURL != "" {
 		testURL = customURL
 	}
-	if !strings.HasPrefix(testURL, "http://") && !strings.HasPrefix(testURL, "https://") {
+	hasScheme := strings.HasPrefix(testURL, "http://") || strings.HasPrefix(testURL, "https://")
+	if !hasScheme {
 		testURL = scheme + "://" + testURL
 	}
 
@@ -38,7 +39,7 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 	client := http.Client{
 		Transport: &http.Transport{
 			DialContext: func(c context.Context, network, addr string) (net.Conn, error) {
-				dialer := &net.Dialer{Timeout: 5 * time.Second}
+				dialer := &net.Dialer{Timeout: 5 * time.Second, Resolver: customResolver}
 				return dialer.DialContext(c, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 			},
 			TLSHandshakeTimeout: 10 * time.Second,
@@ -46,7 +47,7 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 		Timeout: 15 * time.Second,
 	}
 
-	fullURL := fmt.Sprintf("%s://%s%s", scheme, parsedURL.Hostname(), parsedURL.RequestURI())
+	fullURL := fmt.Sprintf("%s://%s%s", parsedURL.Scheme, parsedURL.Host, parsedURL.RequestURI())
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 	if err != nil {
 		return 0, "请求构造错误"
@@ -139,7 +140,7 @@ loop:
 	}
 
 	if totalBytes <= 0 || maxSpeedMB <= 0 {
-		return 0, "0 MB/s"
+		return 0, "0MB/s"
 	}
 
 	duration := time.Since(start).Seconds()
@@ -154,7 +155,7 @@ loop:
 }
 
 func runSpeedTest(ctx context.Context, session *appSession, ip string, port int, customURL string) {
-    session.sendWSMessage("log", fmt.Sprintf("开始对 IP %s 端口 %d 进行测速...", ip, port))
+	session.sendWSMessage("log", fmt.Sprintf("开始对 IP %s 端口 %d 进行测速...", ip, port))
 
 	speedMB, speedErr := runWindowedSpeedTest(ctx, ip, port, customURL)
 	if speedErr != "" {
@@ -162,8 +163,8 @@ func runSpeedTest(ctx context.Context, session *appSession, ip string, port int,
 		session.sendWSMessage("log", "测速失败: "+speedErr)
 		return
 	}
-	speedStr := fmt.Sprintf("%.2f MB/s", speedMB)
+	speedStr := fmt.Sprintf("%.2fMB/s", speedMB)
 
-    session.sendWSMessage("speed_test_result", map[string]string{"ip": ip, "speed": speedStr})
-    session.sendWSMessage("log", fmt.Sprintf("IP %s 测速完成: %s", ip, speedStr))
+	session.sendWSMessage("speed_test_result", map[string]string{"ip": ip, "speed": speedStr})
+	session.sendWSMessage("log", fmt.Sprintf("IP %s 测速完成: %s", ip, speedStr))
 }

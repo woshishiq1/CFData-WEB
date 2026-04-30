@@ -145,6 +145,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if params.Delay < 0 {
 				params.Delay = 0
 			}
+			if params.ResultLimit < 0 {
+				params.ResultLimit = 0
+			}
+			if params.SpeedLimit < 0 {
+				params.SpeedLimit = 0
+			}
+			if params.SpeedMin < 0 {
+				params.SpeedMin = 0
+			}
 			if strings.TrimSpace(params.SpeedURL) == "" {
 				params.SpeedURL = speedTestURL
 			}
@@ -177,7 +186,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 					fileName = params.SourceURL
 					fileContent = content
 				}
-				runNSBTask(ctx, session, fileName, fileContent, params.OutFile, params.MaxThreads, params.SpeedTest, params.SpeedURL, params.EnableTLS, params.Delay, params.Compact)
+				runNSBTask(ctx, session, fileName, fileContent, params.OutFile, params.MaxThreads, params.SpeedTest, params.SpeedURL, params.EnableTLS, params.Delay, params.ResultLimit, params.DC, params.SpeedMin, params.SpeedLimit, params.Compact)
 			})
 		},
 		"stop_task": func(data json.RawMessage) {
@@ -198,11 +207,12 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			safeGo("github-upload", session, func() {
-				if err := uploadGitHubContent(r.Context(), params); err != nil {
+				downloadURL, err := uploadGitHubContent(r.Context(), params)
+				if err != nil {
 					session.sendWSMessage("error", "上传 GitHub 失败: "+err.Error())
 					return
 				}
-				session.sendWSMessage("github_upload_result", map[string]string{"path": params.Path, "rawURL": githubRawURL(params)})
+				session.sendWSMessage("github_upload_result", map[string]string{"path": params.Path, "rawURL": downloadURL})
 			})
 		},
 	}
@@ -228,7 +238,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func uploadGitHubContent(ctx context.Context, params githubUploadRequest) error {
+func uploadGitHubContent(ctx context.Context, params githubUploadRequest) (string, error) {
 	params.Token = strings.TrimSpace(params.Token)
 	params.Owner = strings.TrimSpace(params.Owner)
 	params.Repo = strings.TrimSpace(params.Repo)
@@ -236,7 +246,7 @@ func uploadGitHubContent(ctx context.Context, params githubUploadRequest) error 
 	params.Path = strings.Trim(strings.TrimSpace(params.Path), "/")
 	params.Message = strings.TrimSpace(params.Message)
 	if params.Token == "" || params.Owner == "" || params.Repo == "" || params.Path == "" || strings.TrimSpace(params.Content) == "" {
-		return fmt.Errorf("token、仓库、路径和内容不能为空")
+		return "", fmt.Errorf("token、仓库、路径和内容不能为空")
 	}
 	if params.Branch == "" {
 		params.Branch = "main"
@@ -248,7 +258,7 @@ func uploadGitHubContent(ctx context.Context, params githubUploadRequest) error 
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", url.PathEscape(params.Owner), url.PathEscape(params.Repo), escapeGitHubContentPath(params.Path))
 	sha, err := getGitHubContentSHA(ctx, apiURL, params.Token, params.Branch)
 	if err != nil {
-		return err
+		return "", err
 	}
 	payload := map[string]string{
 		"message": params.Message,
@@ -260,23 +270,24 @@ func uploadGitHubContent(ctx context.Context, params githubUploadRequest) error 
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, apiURL, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return "", err
 	}
 	setGitHubHeaders(req, params.Token)
 	resp, err := upstreamHTTPClient.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("GitHub API 返回 %s: %s", resp.Status, strings.TrimSpace(string(data)))
+		return "", fmt.Errorf("GitHub API 返回 %s: %s", resp.Status, strings.TrimSpace(string(data)))
 	}
-	return nil
+	io.Copy(io.Discard, resp.Body)
+	return githubRawURL(params), nil
 }
 
 func githubRawURL(params githubUploadRequest) string {
