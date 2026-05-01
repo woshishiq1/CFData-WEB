@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestParseNSBInputsNoisyFormats(t *testing.T) {
@@ -38,6 +40,69 @@ cloudflare.com    优选
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("parseNSBInputs() = %#v, want %#v", got, want)
+	}
+}
+
+func TestOfficialResultRowsUsesTestMetadataWithoutScan(t *testing.T) {
+	rows := officialResultRows(nil, []TestResult{{
+		IP:         "203.0.113.10",
+		Port:       8443,
+		DataCenter: "NRT",
+		Region:     "Asia Pacific",
+		City:       "Tokyo",
+		AvgLatency: 35 * time.Millisecond,
+		Speed:      "12.30MB/s",
+	}})
+	if len(rows) != 1 {
+		t.Fatalf("officialResultRows len = %d, want 1", len(rows))
+	}
+	row := rows[0]
+	if row["dc"] != "NRT" || row["region"] != "Asia Pacific" || row["city"] != "Tokyo" {
+		t.Fatalf("officialResultRows metadata = %#v", row)
+	}
+	if row["ipport"] != "203.0.113.10:8443" || row["latency"] != "35ms" || row["speed"] != "12.30MB/s" {
+		t.Fatalf("officialResultRows fields = %#v", row)
+	}
+}
+
+func TestResolveCLIFieldsOfficialCompactMatchesNSBOrder(t *testing.T) {
+	rows := []cliResultRow{{"ip": "203.0.113.10", "port": "8443", "latency": "35ms", "speed": "12.30MB/s", "dc": "NRT", "region": "Asia Pacific", "city": "Tokyo"}}
+	got := resolveCLIFields("compact", "csv", rows)
+	want := []string{"ip", "port", "latency", "speed", "dc", "region", "city"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolveCLIFields official compact = %#v, want %#v", got, want)
+	}
+}
+
+func TestOfficialResultRowsSortsLikeNSB(t *testing.T) {
+	rows := officialResultRows(nil, []TestResult{
+		{IP: "203.0.113.3", Port: 443, AvgLatency: 10 * time.Millisecond, Speed: "5.00MB/s"},
+		{IP: "203.0.113.1", Port: 443, AvgLatency: 30 * time.Millisecond},
+		{IP: "203.0.113.2", Port: 443, AvgLatency: 20 * time.Millisecond, Speed: "20.00MB/s"},
+	})
+	got := []string{rows[0]["ip"], rows[1]["ip"], rows[2]["ip"]}
+	want := []string{"203.0.113.2", "203.0.113.3", "203.0.113.1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("officialResultRows order = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunNSBSpeedWorkersLimitsTestedCountButKeepsResults(t *testing.T) {
+	results := []iptestResult{{ipAddr: "1"}, {ipAddr: "2"}, {ipAddr: "3"}, {ipAddr: "4"}}
+	runNSBSpeedWorkers(context.Background(), results, 2, 2, 0.1, nil, nil, func(idx int) (float64, string) {
+		return 10 * 1024, ""
+	})
+	tested := 0
+	for _, res := range results {
+		if res.speedTested {
+			tested++
+		}
+	}
+	if tested != 2 {
+		t.Fatalf("speed tested count = %d, want 2", tested)
+	}
+	if len(results) != 4 {
+		t.Fatalf("results len = %d, want 4", len(results))
 	}
 }
 

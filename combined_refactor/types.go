@@ -28,6 +28,8 @@ var (
 	customResolver  *net.Resolver
 )
 
+const defaultDNSServers = "223.5.5.5,8.8.8.8"
+
 type location struct {
 	Iata      string  `json:"iata"`
 	Lat       float64 `json:"lat"`
@@ -61,6 +63,9 @@ type ScanResult struct {
 type TestResult struct {
 	IP         string
 	Port       int
+	DataCenter string
+	Region     string
+	City       string
 	MinLatency time.Duration
 	MaxLatency time.Duration
 	AvgLatency time.Duration

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"math"
@@ -41,7 +40,7 @@ func scanOfficialIP(ctx context.Context, ip string, port int) *ScanResult {
 	}
 	if isTLSPort(port) {
 		scheme = "https://"
-		transport.TLSClientConfig = &tls.Config{ServerName: "speed.cloudflare.com"}
+		transport.TLSClientConfig = tlsConfigWithRootCAs("speed.cloudflare.com")
 	}
 
 	client := http.Client{
@@ -258,10 +257,12 @@ func runOfficialTask(ctx context.Context, session *appSession, ipType int, scanM
 
 func runDetailedTest(ctx context.Context, session *appSession, selectedDC string, port int, delay int) {
 	var testIPList []string
+	scanByIP := make(map[string]ScanResult)
 	session.scanMutex.Lock()
 	for _, res := range session.scanResults {
 		if selectedDC == "" || res.DataCenter == selectedDC {
 			testIPList = append(testIPList, res.IP)
+			scanByIP[res.IP] = res
 		}
 	}
 	session.scanMutex.Unlock()
@@ -297,6 +298,11 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 		res := testIPLatency(ctx, ip, port, delay)
 		if res == nil {
 			return
+		}
+		if scan, ok := scanByIP[ip]; ok {
+			res.DataCenter = scan.DataCenter
+			res.Region = scan.Region
+			res.City = scan.City
 		}
 		session.sendWSMessage("test_result", *res)
 

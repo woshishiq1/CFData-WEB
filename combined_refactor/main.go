@@ -74,7 +74,7 @@ func main() {
 
 	flag.IntVar(&listenPort, "port", 13335, "服务监听端口")
 	flag.StringVar(&speedTestURL, "url", "speed.cloudflare.com/__down?bytes=99999999", "测速下载地址（不含协议前缀）")
-	flag.StringVar(&customDNSServer, "dns", "", "自定义 DNS 服务器，例如 1.1.1.1 或 8.8.8.8:53；留空使用系统 DNS")
+	flag.StringVar(&customDNSServer, "dns", defaultDNSServers, "自定义 DNS 服务器，例如 223.5.5.5、8.8.8.8:53 或逗号分隔多个；留空使用系统 DNS")
 	flag.BoolVar(&debugMode, "debug", false, "开启调试输出（导出失败明细 CSV）")
 	flag.StringVar(&webUser, "user", "", "Web 认证用户名（不设置则不启用认证）")
 	flag.StringVar(&webPassword, "password", "", "Web 认证密码（需同时设置 -user）")
@@ -133,6 +133,11 @@ func main() {
 		fmt.Println("警告： 需要同时设置 -user 和 -password 才会启用认证")
 	}
 	fmt.Printf("当前测速网址: %s\n", speedTestURL)
+	if strings.TrimSpace(customDNSServer) == "" {
+		fmt.Println("当前 DNS: 系统 DNS")
+	} else {
+		fmt.Printf("当前 DNS: %s\n", customDNSServer)
+	}
 	fmt.Printf("调试模式: %v\n", debugMode)
 	server := &http.Server{
 		Addr:              addr,

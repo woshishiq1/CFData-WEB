@@ -200,7 +200,7 @@
         }
 
         h1 {
-            margin: 0 0 16px 0;
+            margin: 0 96px 16px;
             text-align: center;
             font-size: 1.75rem;
         }
@@ -258,7 +258,12 @@
         }
 
         @media (max-width: 768px) {
-            .settings-toggle {
+            h1 {
+                margin: 56px 0 16px;
+                font-size: 1.5rem;
+            }
+
+            .top-actions {
                 right: 12px;
                 top: 12px;
             }
@@ -948,6 +953,12 @@
         @media (max-width: 768px) {
 
             /* 修改点：针对移动端竖屏，将结果操作弹窗由双列改为单列，修复排版挤压异常 */
+            .modal-mask {
+                align-items: flex-start;
+                padding: 10px;
+                overflow-y: auto;
+            }
+
             .modal-grid {
                 grid-template-columns: 1fr;
             }
@@ -956,12 +967,85 @@
                 width: calc(100vw - 20px);
                 max-height: 94vh;
                 padding: 18px 16px 18px 18px;
+                margin: 0 auto;
             }
 
             .modal-body {
                 max-height: calc(94vh - 92px);
-                padding-right: 20px;
-                margin-right: -10px;
+                padding-right: 0;
+                margin-right: 0;
+                overflow-x: hidden;
+            }
+
+            .result-modal,
+            .modal-body,
+            .modal-grid,
+            .modal-field,
+            .field-head,
+            .field-head-actions,
+            .field-picker,
+            .field-pill,
+            .order-list,
+            .order-item,
+            .github-account-row,
+            .modal-actions {
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+            }
+
+            .field-head,
+            .github-account-row,
+            .modal-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .field-head-actions,
+            .modal-actions {
+                justify-content: stretch;
+            }
+
+            .field-head-actions .action-btn,
+            .modal-actions .action-btn,
+            .github-account-row select,
+            .github-account-row .action-btn {
+                width: 100%;
+                min-width: 0;
+            }
+
+            .modal-field input,
+            .modal-field select,
+            .modal-field button,
+            .modal-field pre,
+            .modal-field .upload-status {
+                max-width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+
+            .field-head-actions {
+                display: grid;
+                grid-template-columns: 1fr;
+            }
+
+            .inline-check {
+                display: flex;
+                align-items: flex-start;
+                white-space: normal;
+            }
+
+            .order-item {
+                flex-wrap: wrap;
+            }
+
+            .field-picker {
+                grid-template-columns: 1fr;
+            }
+
+            .result-preview,
+            .upload-status {
+                max-width: 100%;
             }
 
             .controls,
@@ -1279,6 +1363,9 @@
                             <tr>
                                 <th>IP 地址</th>
                                 <th>端口</th>
+                                <th>数据中心</th>
+                                <th>地区</th>
+                                <th>城市</th>
                                 <th>丢包率</th>
                                 <th>最小延迟</th>
                                 <th>最大延迟</th>
@@ -1420,6 +1507,7 @@
         let runningTaskTab = 'scan';
         let resultModalMode = 'scan';
         let resultFieldOrder = [];
+        let autoUploadKeys = new Set();
         const githubAccountStorageKey = 'cfdata-github-accounts';
         const githubSessionTokens = new Map();
         const githubTokenCryptoSalt = 'cfdata-github-token-v1';
@@ -2017,6 +2105,25 @@
             scanData.forEach(renderScanRowOfficial);
         }
 
+        function compareOfficialResultObjects(a, b) {
+            const speedA = parseSpeedMB(a.speed);
+            const speedB = parseSpeedMB(b.speed);
+            const hasSpeedA = speedA >= 0;
+            const hasSpeedB = speedB >= 0;
+            if (hasSpeedA !== hasSpeedB) return hasSpeedA ? -1 : 1;
+            if (hasSpeedA && speedA !== speedB) return speedB - speedA;
+            const latencyA = parseFloat(a.latency);
+            const latencyB = parseFloat(b.latency);
+            return (Number.isFinite(latencyA) ? latencyA : Number.MAX_SAFE_INTEGER) - (Number.isFinite(latencyB) ? latencyB : Number.MAX_SAFE_INTEGER);
+        }
+
+        function parseSpeedMB(value) {
+            const text = String(value || '');
+            if (!text.includes('MB/s')) return -1;
+            const speed = parseFloat(text);
+            return Number.isFinite(speed) ? speed : -1;
+        }
+
         function updateBadge(id, v) {
             document.getElementById(id).textContent = v;
         }
@@ -2043,6 +2150,7 @@
             const delay = parseInt(document.getElementById('testDelay').value) || 500;
 
             testResultsCount = 0;
+            autoUploadKeys = new Set();
             updateBadge('testCount', 0);
             testData = [];
             currentTestingDC = dc;
@@ -2064,7 +2172,12 @@
 
         function renderTestRow(res) {
             const port = res.Port || parseInt(document.getElementById('testPort').value) || 443;
-            const row = `<tr><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}">未测速</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')">测速</button></td></tr>`;
+            const meta = testResultToObject(res);
+            const speedText = res.Speed || '未测速';
+            const speedColor = speedText.includes('MB/s') ? (parseFloat(speedText) > SPEED_GREEN ? '#10b981' : '#f59e0b') : (speedText === '未测速' ? '' : '#ef4444');
+            const isTesting = currentSpeedTestingIP === res.IP;
+            const buttonText = isTesting ? '测速中' : (res.Speed ? '重新测速' : '测速');
+            const row = `<tr><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};">${speedText}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${isTesting ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
             document.querySelector('#testTable tbody').insertAdjacentHTML('beforeend', row);
         }
 
@@ -2264,6 +2377,7 @@
             currentTestingDC = '';
             scanResultsCount = 0;
             testResultsCount = 0;
+            autoUploadKeys = new Set();
             updateBadge('scanCount', 0);
             updateBadge('testCount', 0);
             updateBadge('dcCount', 0);
@@ -2327,6 +2441,7 @@
             nsbLiveRows = [];
             nsbLiveIndex = {};
             updateBadge('scanCount', 0);
+            autoUploadKeys = new Set();
 
             if (!wsSend({
                 type: 'start_nsb_task',
@@ -2414,13 +2529,21 @@
         function getAllResultFieldOrder() {
             const rows = getCurrentResultRows(resultModalMode);
             if (!rows.length) return ['ipport'];
+            if (currentMode === 'official') {
+                return getOfficialResultFieldOrder().filter((key) => rows.some((r) => String(r[key] ?? '').trim() !== ''));
+            }
             return RESULT_FIELDS.filter((f) => rows.some((r) => String(r[f.key] ?? '').trim() !== '') && f.key !== 'ipport').map((f) => f.key);
         }
 
         function getCompactResultFieldOrder() {
             if (currentMode === 'nsb') return ['ip', 'port', 'tls', 'latency', 'speed', 'outboundIP', 'ipType', 'dc', 'loc', 'region', 'city', 'asnNumber', 'asnOrg'];
-            if (resultModalMode === 'test') return ['ip', 'port', 'latency', 'speed'];
-            return ['ip', 'port', 'dc', 'region', 'city', 'latency'];
+            return getOfficialResultFieldOrder();
+        }
+
+        function getOfficialResultFieldOrder() {
+            return resultModalMode === 'test'
+                ? ['ip', 'port', 'latency', 'speed', 'dc', 'region', 'city']
+                : ['ip', 'port', 'latency', 'dc', 'region', 'city'];
         }
 
         function renderResultFieldOptions() {
@@ -2678,8 +2801,8 @@
 
         function getCurrentResultRows(mode) {
             if (currentMode === 'nsb') return getNSBResultObjects();
-            if (mode === 'test') return testData.map(testResultToObject);
-            return scanData.map(scanResultToObject);
+            const rows = mode === 'test' ? testData.map(testResultToObject) : scanData.map(scanResultToObject);
+            return rows.slice().sort(compareOfficialResultObjects);
         }
 
         function scanResultToObject(r) {
@@ -2688,7 +2811,17 @@
 
         function testResultToObject(r) {
             const port = r.Port || parseInt(document.getElementById('testPort').value) || 443;
-            return { ip: r.IP || '', port: String(port), ipport: `${r.IP || ''}:${port}`, latency: `${(r.AvgLatency / 1_000_000).toFixed(0)}ms`, speed: r.Speed || '未测速' };
+            const scan = scanData.find((item) => item.IP === r.IP) || {};
+            return {
+                ip: r.IP || '',
+                port: String(port),
+                ipport: `${r.IP || ''}:${port}`,
+                dc: scan.DataCenter || r.DataCenter || '',
+                region: scan.Region || r.Region || '',
+                city: scan.City || r.City || '',
+                latency: `${(r.AvgLatency / 1_000_000).toFixed(0)}ms`,
+                speed: r.Speed || '未测速',
+            };
         }
 
         function getNSBResultObjects() {
@@ -2812,11 +2945,11 @@
                 token: document.getElementById('githubToken').value.trim(),
                 owner: repoParts[0], repo: repoParts[1],
                 branch: document.getElementById('githubBranch').value.trim() || 'main',
-                path: document.getElementById('githubPath').value.trim() || (quickFile ? `results/${quickFile.name}` : ''),
+                path: document.getElementById('githubPath').value.trim() || (quickFile ? `results/${quickFile.name}` : `results/ip.${format}`),
                 message: document.getElementById('githubMessage').value.trim() || 'update cfdata results',
                 content,
             };
-            if (!payload.token || !payload.path) return alert('Token 和目标路径不能为空');
+            if (!payload.token) return alert('Token 不能为空');
             await saveCurrentGitHubAccount(payload);
             /* 修改点：给“上传中”也加上 'success' 类，配合 CSS 实现绿色加粗 */
             setGitHubUploadStatus(`上传中: ${quickFile ? quickFile.name : payload.path}`, 'success');
@@ -2857,6 +2990,14 @@
             resultFieldOrder = getDefaultResultFieldOrder(format || 'txt');
             const repoParts = account.repo.split('/');
             const path = (account.path || `results/ip.${format || 'txt'}`).replace(/\.(csv|txt)$/i, `.${format || 'txt'}`);
+            const uploadKey = `${mode}:${idx}:${format || 'txt'}:${path}`;
+            if (autoUploadKeys.has(uploadKey)) {
+                log(`自动上传已跳过重复提交: ${path}`);
+                resultModalMode = oldMode;
+                resultFieldOrder = oldOrder;
+                return;
+            }
+            autoUploadKeys.add(uploadKey);
             const payload = {
                 token,
                 owner: repoParts[0], repo: repoParts[1],

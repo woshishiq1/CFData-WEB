@@ -43,6 +43,7 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 				return dialer.DialContext(c, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 			},
 			TLSHandshakeTimeout: 10 * time.Second,
+			TLSClientConfig:     tlsConfigWithRootCAs(parsedURL.Hostname()),
 		},
 		Timeout: 15 * time.Second,
 	}

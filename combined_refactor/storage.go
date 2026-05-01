@@ -18,6 +18,7 @@ func configureHTTPClients() {
 	initCustomResolver()
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = dialContext
+	transport.TLSClientConfig = tlsConfigWithRootCAs("")
 	upstreamHTTPClient.Transport = transport
 }
 

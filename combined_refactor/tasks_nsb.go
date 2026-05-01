@@ -79,6 +79,7 @@ func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int, t
 			Dial: func(network, addr string) (net.Conn, error) {
 				return conn, nil
 			},
+			TLSClientConfig: tlsConfigWithRootCAs("speed.cloudflare.com"),
 		},
 	}
 	req, err := http.NewRequestWithContext(httpCtx, "GET", protocol+requestURL, nil)
@@ -281,6 +282,7 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
 				return dialer.DialContext(c, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 			},
 			TLSHandshakeTimeout: 10 * time.Second,
+			TLSClientConfig:     tlsConfigWithRootCAs(parsedURL.Hostname()),
 		},
 	}
 
@@ -595,7 +597,7 @@ func runNSBSpeedWorkers(ctx context.Context, results []iptestResult, maxWorkers,
 	qualified := 0
 	wasCanceled := false
 	shouldSend := func() bool {
-		return next < len(results) && qualified+inFlight < speedLimit
+		return next < len(results) && next < speedLimit
 	}
 
 	for shouldSend() || inFlight > 0 {

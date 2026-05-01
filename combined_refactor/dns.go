@@ -2,43 +2,78 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"time"
 )
 
 func initCustomResolver() {
-	server := strings.TrimSpace(customDNSServer)
-	if server == "" {
+	servers := normalizeDNSServers(customDNSServer)
+	if len(servers) == 0 {
 		customResolver = nil
 		return
-	}
-	if host, port, err := net.SplitHostPort(server); err == nil {
-		if host == "" || port == "" {
-			server = net.JoinHostPort(strings.Trim(host, "[]"), "53")
-		}
-	} else if ip := net.ParseIP(strings.Trim(server, "[]")); ip != nil {
-		server = net.JoinHostPort(ip.String(), "53")
-	} else {
-		server = net.JoinHostPort(server, "53")
 	}
 	customResolver = &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			dialer := net.Dialer{Timeout: 5 * time.Second}
-			conn, err := dialer.DialContext(ctx, network, server)
-			if err == nil || network == "tcp" {
-				return conn, err
+			var errs []error
+			for _, server := range servers {
+				dialer := net.Dialer{Timeout: 5 * time.Second}
+				conn, err := dialer.DialContext(ctx, network, server)
+				if err == nil || network == "tcp" {
+					return conn, err
+				}
+				errs = append(errs, err)
+				conn, err = dialer.DialContext(ctx, "tcp", server)
+				if err == nil {
+					return conn, nil
+				}
+				errs = append(errs, err)
 			}
-			return dialer.DialContext(ctx, "tcp", server)
+			return nil, errors.Join(errs...)
 		},
 	}
+}
+
+func normalizeDNSServers(value string) []string {
+	fields := strings.FieldsFunc(strings.TrimSpace(value), func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\n' || r == '\t'
+	})
+	servers := make([]string, 0, len(fields))
+	for _, field := range fields {
+		server := strings.TrimSpace(field)
+		if server == "" {
+			continue
+		}
+		if host, port, err := net.SplitHostPort(server); err == nil {
+			if host == "" || port == "" {
+				server = net.JoinHostPort(strings.Trim(host, "[]"), "53")
+			}
+		} else if ip := net.ParseIP(strings.Trim(server, "[]")); ip != nil {
+			server = net.JoinHostPort(ip.String(), "53")
+		} else {
+			server = net.JoinHostPort(server, "53")
+		}
+		servers = append(servers, server)
+	}
+	return servers
 }
 
 func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	dialer := net.Dialer{Timeout: 30 * time.Second}
 	if customResolver != nil {
 		dialer.Resolver = customResolver
+		conn, err := dialer.DialContext(ctx, network, addr)
+		if err == nil || !isDNSError(err) {
+			return conn, err
+		}
+		return (&net.Dialer{Timeout: 30 * time.Second}).DialContext(ctx, network, addr)
 	}
 	return dialer.DialContext(ctx, network, addr)
+}
+
+func isDNSError(err error) bool {
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr)
 }

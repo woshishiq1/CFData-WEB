@@ -57,7 +57,7 @@ jobs:
       - name: Set Build Time
         id: set-build-time
         run: |
-          build_time=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
           echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
 
       - name: Set Version
@@ -68,6 +68,14 @@ jobs:
             version="${{ github.ref_name }}"
           fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
+
+      - name: Download CA Certificates
+        run: |
+          curl -fsSL --retry 3 --connect-timeout 10 \
+            https://curl.se/ca/cacert.pem \
+            -o combined_refactor/ca-certificates.crt
+          cert_count=$(grep -c "BEGIN CERTIFICATE" combined_refactor/ca-certificates.crt || true)
+          echo "Downloaded ${cert_count} CA certificates before build."
 
       - name: Build
         run: |
@@ -121,20 +129,30 @@ jobs:
       - name: Get build time
         id: get-time
         run: |
-          build_time=$(git log -1 --format='%ci' --date=format:'%Y-%m-%d %H:%M:%S UTC')
+          build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
           echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get-version.outputs.VERSION }}
-          name: "Release ${{ steps.get-version.outputs.VERSION }}"
+          name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
           body: |
-            ## ${{ steps.get-version.outputs.VERSION }}
+            ## v1.4.2-${{ steps.get-version.outputs.VERSION }}
 
-            **Build Time:** ${{ steps.get-time.outputs.BUILD_TIME }}
 
-            **Compiled by GitHub Actions**
+            构建时间 / Built Time: ${{ steps.get-time.outputs.BUILD_TIME }}
+
+
+            构建方式 / Built with: GitHub Actions
+
+
+            采用 GitHub Actions 自动构建
+            Automated build via GitHub Actions
+            支持 macOS / Windows / Linux（ARM64、AMD64）
+            Supports macOS / Windows / Linux (ARM64, AMD64)
+            非标准 Linux 环境可使用 Linux 版本运行
+            Non-standard Linux environments can run the Linux version
           files: artifacts/*
           draft: false
           prerelease: ${{ contains(steps.get-version.outputs.VERSION, '-') }}

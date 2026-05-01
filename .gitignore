@@ -20,6 +20,19 @@ Thumbs.db
 *.so
 *.dylib
 
+# Build and runtime cache artifacts
+release_assets/
+cfdata-config.json
+ips-v4.txt
+ips-v6.txt
+locations.json
+GeoLite2-ASN.mmdb
+combined_refactor/cfdata-config.json
+combined_refactor/ips-v4.txt
+combined_refactor/ips-v6.txt
+combined_refactor/locations.json
+combined_refactor/*.mmdb
+
 # Windows alternate data stream artifacts copied into archives
 *.Zone.Identifier
 *Zone.Identifier*

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -157,7 +158,7 @@ var (
 		{name: "progress", description: "是否输出进度日志", defaultValue: "true"},
 		{name: "nocolor", description: "禁用颜色输出（cmd 等不支持 ANSI 的终端可开启避免乱码）", defaultValue: "false"},
 		{name: "url", description: "测速下载地址", defaultValue: "speed.cloudflare.com/__down?bytes=99999999"},
-		{name: "dns", description: "自定义 DNS 服务器，例如 1.1.1.1、8.8.8.8:53 或 2606:4700:4700::1111；留空使用系统 DNS", defaultValue: "<系统 DNS>"},
+		{name: "dns", description: "自定义 DNS 服务器，例如 223.5.5.5、8.8.8.8:53 或逗号分隔多个；留空使用系统 DNS", defaultValue: defaultDNSServers},
 		{name: "debug", description: "是否开启调试输出", defaultValue: "false"},
 		{name: "compactipv4", description: "精简本地 IPv4 地址库：按 /24 子网测 TCP:80 连通性并覆盖 ips-v4.txt", defaultValue: "false"},
 		{name: "config", description: "CLI 配置文件路径，不存在时在二进制目录自动生成模板", defaultValue: "二进制目录/cfdata-config.json"},
@@ -430,7 +431,7 @@ func defaultCLIExportConfig() cliExportConfig {
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: "speed.cloudflare.com/__down?bytes=99999999", DNS: "", Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 0, SpeedMin: 0.1, File: "", SourceURL: "", NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 20, Format: "csv", Fields: "compact", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
+	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: "speed.cloudflare.com/__down?bytes=99999999", DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 0, SpeedMin: 0.1, File: "", SourceURL: "", NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 20, Format: "csv", Fields: "compact", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
@@ -1421,6 +1422,12 @@ func resolveCLIFields(spec, format string, rows []cliResultRow) []string {
 		if format == "txt" {
 			return []string{"ipport", "dc", "loc"}
 		}
+		if rowsAreOfficial(rows) {
+			if rowsHaveField(rows, "speed") {
+				return []string{"ip", "port", "latency", "speed", "dc", "region", "city"}
+			}
+			return []string{"ip", "port", "latency", "dc", "region", "city"}
+		}
 		return []string{"ip", "port", "tls", "latency", "speed", "outboundIP", "ipType", "dc", "loc", "region", "city", "asnNumber", "asnOrg"}
 	}
 	if spec == "ipport" {
@@ -1455,6 +1462,36 @@ func resolveCLIFields(spec, format string, rows []cliResultRow) []string {
 	return fields
 }
 
+func rowsAreOfficial(rows []cliResultRow) bool {
+	if len(rows) == 0 {
+		return false
+	}
+	for _, row := range rows {
+		if hasAnyCLIField(row, "tls", "outboundIP", "ipType", "loc", "asnNumber", "asnOrg", "visitScheme", "tlsVersion", "sni", "httpVersion", "warp", "gateway", "rbi", "kex", "timestamp") {
+			return false
+		}
+	}
+	return true
+}
+
+func rowsHaveField(rows []cliResultRow, field string) bool {
+	for _, row := range rows {
+		if strings.TrimSpace(row[field]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAnyCLIField(row cliResultRow, fields ...string) bool {
+	for _, field := range fields {
+		if strings.TrimSpace(row[field]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func cliFieldLabel(key string) string {
 	for _, field := range cliResultFields {
 		if field.Key == key {
@@ -1474,7 +1511,9 @@ func officialScanRows(scanResults []ScanResult) []cliResultRow {
 
 func officialResultRows(scanResults []ScanResult, testResults []TestResult) []cliResultRow {
 	if len(testResults) == 0 {
-		return officialScanRows(scanResults)
+		rows := officialScanRows(scanResults)
+		sortOfficialRows(rows)
+		return rows
 	}
 	scanByIP := make(map[string]ScanResult, len(scanResults))
 	for _, res := range scanResults {
@@ -1488,8 +1527,53 @@ func officialResultRows(scanResults []ScanResult, testResults []TestResult) []cl
 			port = res.Port
 		}
 		rows = append(rows, cliResultRow{"ip": res.IP, "port": strconv.Itoa(port), "ipport": fmt.Sprintf("%s:%d", res.IP, port), "dc": scan.DataCenter, "region": scan.Region, "city": scan.City, "latency": fmt.Sprintf("%dms", res.AvgLatency/time.Millisecond), "speed": res.Speed})
+		if rows[len(rows)-1]["dc"] == "" {
+			rows[len(rows)-1]["dc"] = res.DataCenter
+			rows[len(rows)-1]["region"] = res.Region
+			rows[len(rows)-1]["city"] = res.City
+		}
 	}
+	sortOfficialRows(rows)
 	return rows
+}
+
+func sortOfficialRows(rows []cliResultRow) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		speedI, okI := parseSpeedMBForSort(rows[i]["speed"])
+		speedJ, okJ := parseSpeedMBForSort(rows[j]["speed"])
+		if okI != okJ {
+			return okI
+		}
+		if okI && speedI != speedJ {
+			return speedI > speedJ
+		}
+		latencyI := parseLatencyMSForSort(rows[i]["latency"])
+		latencyJ := parseLatencyMSForSort(rows[j]["latency"])
+		if latencyI != latencyJ {
+			return latencyI < latencyJ
+		}
+		return rows[i]["ip"] < rows[j]["ip"]
+	})
+}
+
+func parseSpeedMBForSort(value string) (float64, bool) {
+	value = strings.TrimSpace(value)
+	if !strings.Contains(value, "MB/s") {
+		return 0, false
+	}
+	speed, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(value, "MB/s")), 64)
+	if err != nil {
+		return 0, false
+	}
+	return speed, true
+}
+
+func parseLatencyMSForSort(value string) float64 {
+	latency, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(value, "ms")), 64)
+	if err != nil {
+		return math.MaxFloat64
+	}
+	return latency
 }
 
 func nsbPayloadRows(headers []string, rows [][]string) []cliResultRow {
