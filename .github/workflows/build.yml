@@ -36,6 +36,10 @@ jobs:
           - goos: windows
             goarch: arm64
             ext: ".exe"
+          # 新增安卓支持：仅保留主流的 arm64 架构
+          - goos: android
+            goarch: arm64
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,10 +47,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "20" # 建议使用稳定版本 20
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v5
         with:
           go-version: "stable"
           cache: true
@@ -67,6 +71,10 @@ jobs:
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
           fi
+          # 兜底处理：如果不是 tag 触发且没输版本号，设为 latest
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
+          fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
       - name: Download CA Certificates
@@ -75,18 +83,27 @@ jobs:
             https://curl.se/ca/cacert.pem \
             -o combined_refactor/ca-certificates.crt
           cert_count=$(grep -c "BEGIN CERTIFICATE" combined_refactor/ca-certificates.crt || true)
-          echo "Downloaded ${cert_count} CA certificates before build."
+          echo "Downloaded ${cert_count} CA certificates."
 
       - name: Build
         run: |
           ext="${{ matrix.ext || '' }}"
           filename="cfdata-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
+          
+          # 针对 Android 开启 PIE 模式，适配安卓系统安全策略
+          extra_flags=""
+          if [ "${{ matrix.goos }}" = "android" ]; then
+            extra_flags="-buildmode=pie"
+          fi
+          
           echo "Building ${filename}..."
           cd combined_refactor
-          go build -ldflags "-s -w" -o ../release_assets/${filename} .
+          go build $extra_flags -ldflags "-s -w" -o ../release_assets/${filename} .
         env:
           GOARCH: ${{ matrix.goarch }}
           GOOS: ${{ matrix.goos }}
+          CGO_ENABLED: 0
+          GODEBUG: netdns=go
 
       - name: Generate SHA256
         run: |
@@ -99,7 +116,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: asset-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext || '' }}
+          name: asset-${{ matrix.goos }}-${{ matrix.goarch }}
           path: release_assets/*
 
   release:
@@ -124,6 +141,9 @@ jobs:
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
           fi
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
+          fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
       - name: Get build time
@@ -140,22 +160,17 @@ jobs:
           body: |
             ## ${{ steps.get-version.outputs.VERSION }}
 
-
-            构建时间 / Built Time: ${{ steps.get-time.outputs.BUILD_TIME }}
-
-
-            构建方式 / Built with: GitHub Actions
-
-
-            采用 GitHub Actions 自动构建
-            Automated build via GitHub Actions
-            支持 macOS / Windows / Linux（ARM64、AMD64）
-            Supports macOS / Windows / Linux (ARM64, AMD64)
-            非标准 Linux 环境可使用 Linux 版本运行
-            Non-standard Linux environments can run the Linux version
+            - **构建时间 / Built Time:** ${{ steps.get-time.outputs.BUILD_TIME }}
+            - **构建方式 / Built with:** GitHub Actions
+            - **支持系统:** Windows, Linux, macOS, Android (Termux)
+            
+            **Android 使用说明:**
+            请在 Termux 等环境中使用 `cfdata-android-arm64` 版本。
+            
+            采用 GitHub Actions 自动构建。
           files: artifacts/*
           draft: false
           prerelease: ${{ contains(steps.get-version.outputs.VERSION, '-') }}
-          fail_on_unmatched_files: true
+          allowUpdates: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
