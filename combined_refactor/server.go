@@ -76,6 +76,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		info, err := getLatestRelease(ctx)
 		if err != nil {
+			session.sendWSMessage("version_info", map[string]interface{}{"version": appVersion, "releaseURL": releaseLatestURL, "error": err.Error()})
 			return
 		}
 		session.sendWSMessage("version_info", map[string]interface{}{"version": appVersion, "latest": info.TagName, "releaseURL": releaseLatestURL, "hasUpdate": versionIsOlder(appVersion, info.TagName)})
@@ -218,12 +219,21 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			safeGo("github-upload", session, func() {
-				downloadURL, err := uploadGitHubContent(r.Context(), params)
+				downloadURL, err := uploadGitHubContentWithRetry(r.Context(), params, func(attempt, total int, err error) {
+					if params.Silent {
+						return
+					}
+					if err == nil {
+						session.sendWSMessage("github_upload_status", map[string]interface{}{"attempt": attempt, "total": total, "message": fmt.Sprintf("第 %d/%d 次上传中", attempt, total)})
+						return
+					}
+					session.sendWSMessage("github_upload_status", map[string]interface{}{"attempt": attempt, "total": total, "message": fmt.Sprintf("第 %d/%d 次上传失败，准备重试: %s", attempt, total, err.Error())})
+				})
 				if err != nil {
-					session.sendWSMessage("error", "上传 GitHub 失败: "+err.Error())
+					session.sendWSMessage("github_upload_error", map[string]interface{}{"path": params.Path, "message": "上传 GitHub 失败: " + err.Error(), "silent": params.Silent})
 					return
 				}
-				session.sendWSMessage("github_upload_result", map[string]string{"path": params.Path, "rawURL": downloadURL})
+				session.sendWSMessage("github_upload_result", map[string]interface{}{"path": params.Path, "rawURL": downloadURL, "silent": params.Silent})
 			})
 		},
 	}
@@ -247,6 +257,33 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		safeHandler(request.Type, handler, request.Data)
 	}
+}
+
+const githubUploadMaxAttempts = 3
+
+func uploadGitHubContentWithRetry(ctx context.Context, params githubUploadRequest, onAttempt func(attempt, total int, err error)) (string, error) {
+	var lastErr error
+	for attempt := 1; attempt <= githubUploadMaxAttempts; attempt++ {
+		if onAttempt != nil {
+			onAttempt(attempt, githubUploadMaxAttempts, nil)
+		}
+		downloadURL, err := uploadGitHubContent(ctx, params)
+		if err == nil {
+			return downloadURL, nil
+		}
+		lastErr = err
+		if onAttempt != nil {
+			onAttempt(attempt, githubUploadMaxAttempts, err)
+		}
+		if attempt < githubUploadMaxAttempts {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+	}
+	return "", lastErr
 }
 
 func uploadGitHubContent(ctx context.Context, params githubUploadRequest) (string, error) {

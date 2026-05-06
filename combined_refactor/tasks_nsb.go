@@ -45,9 +45,8 @@ func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int, t
 		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "端口无效", detail: err.Error()}
 	}
 
-	dialer := &net.Dialer{Timeout: timeout, KeepAlive: 0}
 	start := time.Now()
-	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(ipAddr, strconv.Itoa(port)))
+	conn, err := dialContextWithTimeout(ctx, "tcp", net.JoinHostPort(ipAddr, strconv.Itoa(port)), timeout)
 	if err != nil {
 		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "TCP连接失败", detail: err.Error()}
 	}
@@ -284,8 +283,7 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
 	client := http.Client{
 		Transport: &http.Transport{
 			DialContext: func(c context.Context, network, addr string) (net.Conn, error) {
-				dialer := &net.Dialer{Timeout: 5 * time.Second, Resolver: customResolver}
-				return dialer.DialContext(c, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+				return dialContextWithTimeout(c, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)), 5*time.Second)
 			},
 			TLSHandshakeTimeout: 10 * time.Second,
 			TLSClientConfig:     tlsConfigWithRootCAs(parsedURL.Hostname()),

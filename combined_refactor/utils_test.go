@@ -67,10 +67,39 @@ func TestOfficialResultRowsUsesTestMetadataWithoutScan(t *testing.T) {
 
 func TestResolveCLIFieldsOfficialCompactMatchesNSBOrder(t *testing.T) {
 	rows := []cliResultRow{{"ip": "203.0.113.10", "port": "8443", "latency": "35ms", "speed": "12.30MB/s", "dc": "NRT", "region": "Asia Pacific", "city": "Tokyo"}}
-	got := resolveCLIFields("compact", "csv", rows)
+	got := resolveCLIFields("compact", "csv", rows, nil)
 	want := []string{"ip", "port", "latency", "speed", "dc", "region", "city"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("resolveCLIFields official compact = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveCLIFieldsSkipsUnknownAndAppendsCustom(t *testing.T) {
+	rows := []cliResultRow{{"ipport": "203.0.113.10:443", "dc": "NRT"}}
+	custom := parseCLICustomFields("备注:测试版,归属:cfdata")
+	got := resolveCLIFields("ipport,missing,备注,dc", "txt", rows, custom)
+	want := []string{"ipport", "备注", "dc", "归属"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolveCLIFields custom = %#v, want %#v", got, want)
+	}
+}
+
+func TestFormatCLIResultsCustomFields(t *testing.T) {
+	rows := []cliResultRow{{"ipport": "203.0.113.10:443", "dc": "NRT"}}
+	got, err := formatCLIResults(rows, cliExportConfig{Format: "txt", Fields: "ipport,备注,dc", Custom: "备注:测试版"})
+	if err != nil {
+		t.Fatalf("formatCLIResults error = %v", err)
+	}
+	want := "203.0.113.10:443#测试版-NRT\n"
+	if got != want {
+		t.Fatalf("formatCLIResults = %q, want %q", got, want)
+	}
+}
+
+func TestParseCLICustomFieldsGeneratesDuplicateKeys(t *testing.T) {
+	got := parseCLICustomFields("备注:测试版,备注:正式版")
+	if len(got) != 2 || got[0].Key != "备注" || got[1].Key != "备注1" {
+		t.Fatalf("parseCLICustomFields duplicate keys = %#v", got)
 	}
 }
 

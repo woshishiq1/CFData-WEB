@@ -1514,6 +1514,10 @@
                         <div class="field-picker" id="resultFieldPicker"></div>
                     </div>
                     <div class="modal-field full">
+                        <label>自定义字段</label>
+                        <input id="resultCustomFields" type="text" placeholder="标题:内容，多项用逗号分隔，例如 备注:测试版,归属:cfdata" oninput="handleCustomResultFieldsChange()">
+                    </div>
+                    <div class="modal-field full">
                         <label>输出顺序</label>
                         <div class="order-list" id="resultOrderList"></div>
                     </div>
@@ -1602,6 +1606,7 @@
         let runningTaskTab = 'scan';
         let resultModalMode = 'scan';
         let resultFieldOrder = [];
+        let resultCustomFields = [];
         let autoUploadKeys = new Set();
         const githubAccountStorageKey = 'cfdata-github-accounts';
         const githubSessionTokens = new Map();
@@ -2700,6 +2705,9 @@
             if (qualifiedField) qualifiedField.style.display = currentMode === 'nsb' ? '' : 'none';
             const qualifiedSelect = document.getElementById('resultQualifiedFilter');
             if (qualifiedSelect) qualifiedSelect.value = currentMode === 'nsb' && nsbSpeedEnabledForResults ? 'qualified' : 'all';
+            resultCustomFields = [];
+            const customInput = document.getElementById('resultCustomFields');
+            if (customInput) customInput.value = '';
             resultFieldOrder = getDefaultResultFieldOrder(document.getElementById('resultFormat').value);
             renderGitHubAccounts();
             renderResultFieldOptions();
@@ -2751,7 +2759,7 @@
             if (!resultFieldOrder.length) resultFieldOrder = getDefaultResultFieldOrder(format);
             if (format === 'txt' && !resultFieldOrder.includes('ipport')) resultFieldOrder.unshift('ipport');
             const rows = getCurrentResultRows(resultModalMode);
-            const available = RESULT_FIELDS.filter((f) => f.key === 'ipport' || rows.some((r) => String(r[f.key] ?? '').trim() !== ''));
+            const available = RESULT_FIELDS.filter((f) => f.key === 'ipport' || rows.some((r) => String(r[f.key] ?? '').trim() !== '')).concat(resultCustomFields);
             document.querySelectorAll('.github-field').forEach((el) => el.style.display = '');
             document.getElementById('resultFieldPicker').innerHTML = available.map((f) => `<label class="field-pill"><input type="checkbox" value="${f.key}" ${resultFieldOrder.includes(f.key) ? 'checked' : ''} onchange="toggleResultField('${f.key}', this.checked)"> ${f.label}</label>`).join('');
             updateResultFieldQuickButtons();
@@ -2940,9 +2948,52 @@
         }
 
         function renderResultOrderList() {
-            const byKey = Object.fromEntries(RESULT_FIELDS.map((f) => [f.key, f]));
+            const byKey = Object.fromEntries(RESULT_FIELDS.concat(resultCustomFields).map((f) => [f.key, f]));
             document.getElementById('resultOrderList').innerHTML = resultFieldOrder.map((key, idx) => `<div class="order-item"><span>${byKey[key]?.label || key}</span><span><button onclick="moveResultField(${idx}, -1)">↑</button> <button onclick="moveResultField(${idx}, 1)">↓</button></span></div>`).join('');
             updateResultPreview();
+        }
+
+        function parseResultCustomFields(spec) {
+            const seen = new Map();
+            return String(spec || '').split(',').map((part) => {
+                let item = part.trim();
+                let key = '';
+                const eq = item.indexOf('=');
+                if (eq >= 0) {
+                    key = item.slice(0, eq).trim().toLowerCase();
+                    item = item.slice(eq + 1).trim();
+                }
+                const rest = item;
+                const colon = rest.indexOf(':');
+                if (colon < 0) return null;
+                const label = rest.slice(0, colon).trim();
+                const value = rest.slice(colon + 1).trim();
+                if (!label || !value) return null;
+                if (!key) key = label.toLowerCase();
+                const baseKey = key;
+                const used = seen.get(baseKey) || 0;
+                if (used > 0) {
+                    let count = used;
+                    do {
+                        key = `${baseKey}${count}`;
+                        count++;
+                    } while (seen.has(key));
+                }
+                seen.set(baseKey, used + 1);
+                if (key !== baseKey) seen.set(key, (seen.get(key) || 0) + 1);
+                return { key, label, value };
+            }).filter(Boolean);
+        }
+
+        function handleCustomResultFieldsChange() {
+            const next = parseResultCustomFields(document.getElementById('resultCustomFields')?.value || '');
+            const nextKeys = new Set(next.map((f) => f.key));
+            resultFieldOrder = resultFieldOrder.filter((key) => !resultCustomFields.some((f) => f.key === key) || nextKeys.has(key));
+            resultCustomFields = next;
+            for (const field of resultCustomFields) {
+                if (!resultFieldOrder.includes(field.key)) resultFieldOrder.push(field.key);
+            }
+            renderResultFieldOptions();
         }
 
         function toggleResultField(key, checked) {
@@ -2965,7 +3016,7 @@
 
         function getAvailableResultFieldKeys() {
             const rows = getCurrentResultRows(resultModalMode);
-            return RESULT_FIELDS.filter((f) => f.key === 'ipport' || rows.some((r) => String(r[f.key] ?? '').trim() !== '')).map((f) => f.key);
+            return RESULT_FIELDS.filter((f) => f.key === 'ipport' || rows.some((r) => String(r[f.key] ?? '').trim() !== '')).concat(resultCustomFields).map((f) => f.key);
         }
 
         function areAllResultFieldsSelected() {
@@ -3067,7 +3118,7 @@
                     return extras.length ? `${ipport}#${extras.join('-')}` : ipport;
                 }).join('\n') + '\n';
             }
-            const byKey = Object.fromEntries(RESULT_FIELDS.map((f) => [f.key, f]));
+            const byKey = Object.fromEntries(RESULT_FIELDS.concat(resultCustomFields).map((f) => [f.key, f]));
             const headers = fields.map((k) => byKey[k]?.label || k);
             const body = rows.map((r) => fields.map((k) => formatCSVCell(r[k])).join(',')).join('\n');
             return headers.join(',') + '\n' + body + '\n';
@@ -3077,7 +3128,11 @@
             const rows = getCurrentExportRows(resultModalMode);
             const start = Math.max(1, parseInt(document.getElementById('resultStartRow')?.value || '1', 10) || 1);
             const end = Math.max(start, parseInt(document.getElementById('resultEndRow')?.value || '20', 10) || 20);
-            return rows.slice(start - 1, end);
+            return rows.slice(start - 1, end).map((row) => {
+                const next = { ...row };
+                for (const field of resultCustomFields) next[field.key] = field.value;
+                return next;
+            });
         }
 
         function formatCSVCell(value) {
@@ -3096,7 +3151,7 @@
                 const extras = fields.filter((k) => k !== 'ipport').map((k) => first[k]).filter((v) => String(v ?? '').trim() !== '');
                 return extras.length ? `${ipport}#${extras.join('-')}` : ipport;
             }
-            const byKey = Object.fromEntries(RESULT_FIELDS.map((f) => [f.key, f]));
+            const byKey = Object.fromEntries(RESULT_FIELDS.concat(resultCustomFields).map((f) => [f.key, f]));
             const headers = fields.map((k) => byKey[k]?.label || k).join(',');
             const values = fields.map((k) => formatCSVCell(first[k])).join(',');
             return `${headers}\n${values}`;
@@ -3118,6 +3173,11 @@
             el.textContent = text;
             el.classList.remove('error', 'success');
             if (type) el.classList.add(type);
+        }
+
+        function sendGitHubUpload(payload) {
+            if (!payload.silent) setGitHubUploadStatus(`第 1/3 次上传中: ${payload.path}`, 'success');
+            wsSend({ type: 'github_upload', data: payload });
         }
 
         function renderRawURLCopy(rawURL) {
@@ -3176,9 +3236,7 @@
             };
             if (!payload.token) return alert('Token 不能为空');
             await saveCurrentGitHubAccount(payload);
-            /* 修改点：给“上传中”也加上 'success' 类，配合 CSS 实现绿色加粗 */
-            setGitHubUploadStatus(`上传中: ${quickFile ? quickFile.name : payload.path}`, 'success');
-            wsSend({ type: 'github_upload', data: payload });
+            sendGitHubUpload(payload);
             log('已提交 GitHub 上传请求');
         }
 
@@ -3234,8 +3292,9 @@
                 path,
                 message: account.message || 'update cfdata results',
                 content,
+                silent: true,
             };
-            wsSend({ type: 'github_upload', data: payload });
+            sendGitHubUpload(payload);
             log(`${logPrefix}: ${account.name || account.repo} ${format || 'txt'}`);
         }
 
@@ -3296,10 +3355,25 @@
                     updateSpeedResult(msg.data);
                     break;
                 case 'github_upload_result':
-                    setGitHubUploadStatus(`上传完成: ${msg.data.rawURL || msg.data.path || ''}`, 'success');
-                    renderRawURLCopy(msg.data.rawURL || '');
+                    if (!msg.data.silent) {
+                        setGitHubUploadStatus(`上传完成: ${msg.data.rawURL || msg.data.path || ''}`, 'success');
+                        renderRawURLCopy(msg.data.rawURL || '');
+                    }
                     log(`GitHub 上传完成: ${msg.data.rawURL || msg.data.path || ''}`);
                     alert(`GitHub 上传完成\n${msg.data.path || ''}`);
+                    break;
+
+                case 'github_upload_status':
+                    setGitHubUploadStatus(msg.data.message || 'GitHub 上传中', 'success');
+                    break;
+
+                case 'github_upload_error':
+                    if (msg.data.silent) {
+                        alert(msg.data.message || 'GitHub 自动上传失败');
+                    } else {
+                        setGitHubUploadStatus(msg.data.message || 'GitHub 上传失败', 'error');
+                    }
+                    log(msg.data.message || 'GitHub 上传失败');
                     break;
 
                 case 'nsb_progress':
@@ -3420,8 +3494,17 @@
             let html = escapeHTML(version);
             if (data.hasUpdate && latest) {
                 html += ` <a href="${releaseURL}" target="_blank" rel="noopener noreferrer">发现新版本 ${escapeHTML(latest)}</a>`;
+            } else if (data.error) {
+                html += ` <span id="versionCheckError">更新检测失败</span>`;
             }
             el.innerHTML = html;
+            if (data.error) {
+                window.clearTimeout(renderVersionInfo.errorTimer);
+                renderVersionInfo.errorTimer = window.setTimeout(() => {
+                    const tip = document.getElementById('versionCheckError');
+                    if (tip) tip.remove();
+                }, 10000);
+            }
         }
 
         function handleResetConfigResult(data) {

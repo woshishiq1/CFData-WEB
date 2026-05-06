@@ -61,15 +61,23 @@ func normalizeDNSServers(value string) []string {
 }
 
 func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	return dialContextWithTimeout(ctx, network, addr, 30*time.Second)
+}
+
+func dialContextWithTimeout(ctx context.Context, network, addr string, timeout time.Duration) (net.Conn, error) {
 	dialer := net.Dialer{Timeout: 30 * time.Second}
-	if customResolver != nil {
-		dialer.Resolver = customResolver
-		conn, err := dialer.DialContext(ctx, network, addr)
-		if err == nil || !isDNSError(err) {
-			return conn, err
-		}
-		return (&net.Dialer{Timeout: 30 * time.Second}).DialContext(ctx, network, addr)
+	if timeout > 0 {
+		dialer.Timeout = timeout
 	}
+	if customResolver != nil && customDNSForced {
+		dialer.Resolver = customResolver
+		return dialer.DialContext(ctx, network, addr)
+	}
+	conn, err := dialer.DialContext(ctx, network, addr)
+	if err == nil || customResolver == nil || !isDNSError(err) {
+		return conn, err
+	}
+	dialer.Resolver = customResolver
 	return dialer.DialContext(ctx, network, addr)
 }
 
