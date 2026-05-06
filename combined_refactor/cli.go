@@ -170,7 +170,7 @@ var (
 		{name: "progress", description: "是否输出进度日志", defaultValue: "true"},
 		{name: "nocolor", description: "禁用颜色输出（cmd 等不支持 ANSI 的终端可开启避免乱码）", defaultValue: "false"},
 		{name: "url", description: "测速下载地址", defaultValue: "speed.cloudflare.com/__down?bytes=99999999"},
-		{name: "dns", description: "自定义 DNS 服务器，例如 223.5.5.5、8.8.8.8:53 或逗号分隔多个；留空使用系统 DNS", defaultValue: defaultDNSServers},
+		{name: "dns", description: "自定义 DNS 服务器，例如 1.1.1.1 或 223.5.5.5,8.8.8.8；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS", defaultValue: defaultDNSServers},
 		{name: "debug", description: "是否开启调试输出", defaultValue: "false"},
 		{name: "compactipv4", description: "精简本地 IPv4 地址库：按 /24 子网测 TCP:80 连通性并覆盖 ips-v4.txt", defaultValue: "false"},
 		{name: "config", description: "CLI 配置文件路径，不存在时在二进制目录自动生成模板", defaultValue: "二进制目录/cfdata-config.json"},
@@ -427,6 +427,7 @@ func applyCLIEnvConfig(cfg *cliConfig, provided map[string]bool) {
 	}
 	if !provided["dns"] && strings.TrimSpace(os.Getenv("CFDATA_DNS")) != "" {
 		customDNSServer = strings.TrimSpace(os.Getenv("CFDATA_DNS"))
+		customDNSForced = true
 	}
 	setBool("debug", "CFDATA_DEBUG", &debugMode)
 	setBool("compactipv4", "CFDATA_COMPACTIPV4", &cfg.compactIPv4)
@@ -581,7 +582,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "progress", Description: "输出进度日志", Default: "true", Options: []string{"true", "false"}},
 		{Name: "nocolor", Description: "禁用 ANSI 颜色输出", Default: "false", Options: []string{"true", "false"}},
 		{Name: "url", Description: "测速下载地址，不含协议前缀", Default: "speed.cloudflare.com/__down?bytes=99999999"},
-		{Name: "dns", Description: "自定义 DNS 服务器；留空使用系统 DNS。用于 IP 库、locations、ASN、GitHub、网络 URL 输入等需要 DNS 的外部请求", Default: ""},
+		{Name: "dns", Description: "自定义 DNS 服务器；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS。用于 IP 库、locations、ASN、GitHub、网络 URL 输入等需要 DNS 的外部请求", Default: defaultDNSServers},
 		{Name: "debug", Description: "开启调试输出和失败明细", Default: "false", Options: []string{"true", "false"}},
 		{Name: "compactipv4", Description: "精简本地 IPv4 地址库并覆盖 ips-v4.txt", Default: "false", Options: []string{"true", "false"}},
 		{Name: "testport", Description: "官方模式详细测试与测速端口", Default: "443"},
@@ -652,6 +653,9 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 	}
 	if !provided["dns"] && strings.TrimSpace(fileCfg.DNS) != "" {
 		customDNSServer = fileCfg.DNS
+	}
+	if provided["dns"] {
+		customDNSForced = true
 	}
 	if !provided["debug"] {
 		debugMode = fileCfg.Debug

@@ -25,6 +25,7 @@ var (
 	//go:embed index.html login.html
 	staticFiles     embed.FS
 	customDNSServer string
+	customDNSForced bool
 	customResolver  *net.Resolver
 )
 

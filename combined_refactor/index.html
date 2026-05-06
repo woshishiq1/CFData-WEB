@@ -3494,8 +3494,17 @@
             let html = escapeHTML(version);
             if (data.hasUpdate && latest) {
                 html += ` <a href="${releaseURL}" target="_blank" rel="noopener noreferrer">发现新版本 ${escapeHTML(latest)}</a>`;
+            } else if (data.error) {
+                html += ` <span id="versionCheckError">更新检测失败</span>`;
             }
             el.innerHTML = html;
+            if (data.error) {
+                window.clearTimeout(renderVersionInfo.errorTimer);
+                renderVersionInfo.errorTimer = window.setTimeout(() => {
+                    const tip = document.getElementById('versionCheckError');
+                    if (tip) tip.remove();
+                }, 10000);
+            }
         }
 
         function handleResetConfigResult(data) {

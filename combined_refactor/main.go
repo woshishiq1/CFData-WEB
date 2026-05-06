@@ -30,8 +30,9 @@ func getLatestRelease(ctx context.Context) (latestReleaseInfo, error) {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "CFData-WEB/"+appVersion)
-	client := http.Client{Timeout: 6 * time.Second}
-	resp, err := client.Do(req)
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	resp, err := upstreamHTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return latestReleaseInfo{}, err
 	}
@@ -145,12 +146,17 @@ func main() {
 
 	flag.IntVar(&listenPort, "port", 13335, "服务监听端口")
 	flag.StringVar(&speedTestURL, "url", "speed.cloudflare.com/__down?bytes=99999999", "测速下载地址（不含协议前缀）")
-	flag.StringVar(&customDNSServer, "dns", defaultDNSServers, "自定义 DNS 服务器，例如 223.5.5.5、8.8.8.8:53 或逗号分隔多个；留空使用系统 DNS")
+	flag.StringVar(&customDNSServer, "dns", defaultDNSServers, "自定义 DNS 服务器，例如 223.5.5.5、8.8.8.8:53 或逗号分隔多个；默认系统 DNS 优先、失败回退到该内置 DNS，显式提供时强制使用指定 DNS")
 	flag.BoolVar(&debugMode, "debug", false, "开启调试输出（导出失败明细 CSV）")
 	flag.StringVar(&webUser, "user", "", "Web 认证用户名（不设置则不启用认证）")
 	flag.StringVar(&webPassword, "password", "", "Web 认证密码（需同时设置 -user）")
 	flag.IntVar(&webSessionMinutes, "session", 720, "Web 登录会话有效期（分钟）")
 	flag.Parse()
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "dns" {
+			customDNSForced = true
+		}
+	})
 	if cliCfg.enabled {
 		if err := prepareCLIConfig(cliCfg); err != nil {
 			if errors.Is(err, errCLIConfigCreated) {

@@ -76,6 +76,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		info, err := getLatestRelease(ctx)
 		if err != nil {
+			session.sendWSMessage("version_info", map[string]interface{}{"version": appVersion, "releaseURL": releaseLatestURL, "error": err.Error()})
 			return
 		}
 		session.sendWSMessage("version_info", map[string]interface{}{"version": appVersion, "latest": info.TagName, "releaseURL": releaseLatestURL, "hasUpdate": versionIsOlder(appVersion, info.TagName)})
