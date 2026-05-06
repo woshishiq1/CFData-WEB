@@ -51,6 +51,7 @@ type cliExportConfig struct {
 	ConfigFile  string `json:"-"`
 	Format      string `json:"format"`
 	Fields      string `json:"fields"`
+	Custom      string `json:"custom"`
 	GitHub      bool   `json:"github"`
 	GitHubSet   bool   `json:"-"`
 	GHRepo      string `json:"ghrepo"`
@@ -92,6 +93,7 @@ type cliFileConfig struct {
 	NSBSpeedLimit int     `json:"nsbspeedlimit"`
 	Format        string  `json:"format"`
 	Fields        string  `json:"fields"`
+	Custom        string  `json:"custom"`
 	GitHub        bool    `json:"github"`
 	GHRepo        string  `json:"ghrepo"`
 	GHBranch      string  `json:"ghbranch"`
@@ -107,6 +109,12 @@ type cliResultRow map[string]string
 type cliResultField struct {
 	Key   string
 	Label string
+}
+
+type cliCustomField struct {
+	Key   string
+	Label string
+	Value string
 }
 
 var cliResultFields = []cliResultField{
@@ -167,7 +175,8 @@ var (
 		{name: "compactipv4", description: "精简本地 IPv4 地址库：按 /24 子网测 TCP:80 连通性并覆盖 ips-v4.txt", defaultValue: "false"},
 		{name: "config", description: "CLI 配置文件路径，不存在时在二进制目录自动生成模板", defaultValue: "二进制目录/cfdata-config.json"},
 		{name: "format", description: "CLI 导出格式：csv 或 txt", defaultValue: "csv"},
-		{name: "fields", description: "CLI 导出字段：compact、all、ipport 或逗号分隔自定义字段", defaultValue: "compact"},
+		{name: "fields", description: "CLI 导出字段：compact、all、ipport 或逗号分隔字段 key；可用 -custom 增加常量字段", defaultValue: "compact"},
+		{name: "custom", description: "CLI 自定义导出字段，格式 标题:内容，多项用逗号分隔；在 -fields 中可用标题排序，未写入则默认追加到最后", defaultValue: ""},
 		{name: "github", description: "CLI 导出后上传到 GitHub", defaultValue: "false"},
 		{name: "ghrepo", description: "GitHub 仓库，格式 owner/repo", defaultValue: ""},
 		{name: "ghbranch", description: "GitHub 分支", defaultValue: "main"},
@@ -231,7 +240,8 @@ func registerCLIFlags() *cliConfig {
 	flag.BoolVar(&cfg.compactIPv4, "compactipv4", false, "精简本地 IPv4 地址库，按 /24 子网探测 TCP:80 连通性后覆盖 ips-v4.txt")
 	flag.StringVar(&cfg.export.ConfigFile, "config", "", "CLI 导出/GitHub 配置文件路径")
 	flag.StringVar(&cfg.export.Format, "format", "", "CLI 导出格式：csv 或 txt")
-	flag.StringVar(&cfg.export.Fields, "fields", "", "CLI 导出字段：compact、all、ipport 或逗号分隔自定义字段")
+	flag.StringVar(&cfg.export.Fields, "fields", "", "CLI 导出字段：compact、all、ipport 或逗号分隔字段 key")
+	flag.StringVar(&cfg.export.Custom, "custom", "", "CLI 自定义导出字段，格式 标题:内容，多项用逗号分隔")
 	flag.BoolVar(&cfg.export.GitHub, "github", false, "CLI 导出后上传到 GitHub")
 	flag.StringVar(&cfg.export.GHRepo, "ghrepo", "", "GitHub 仓库 owner/repo")
 	flag.StringVar(&cfg.export.GHBranch, "ghbranch", "", "GitHub 分支")
@@ -328,6 +338,7 @@ func resolveCLIExportConfig(cfg *cliConfig) error {
 	envCfg := cliExportConfig{
 		Format:      os.Getenv("CFDATA_FORMAT"),
 		Fields:      os.Getenv("CFDATA_FIELDS"),
+		Custom:      os.Getenv("CFDATA_CUSTOM"),
 		GHRepo:      os.Getenv("CFDATA_GHREPO"),
 		GHBranch:    os.Getenv("CFDATA_GHBRANCH"),
 		GHPath:      os.Getenv("CFDATA_GHPATH"),
@@ -437,15 +448,15 @@ func applyCLIEnvConfig(cfg *cliConfig, provided map[string]bool) {
 }
 
 func defaultCLIExportConfig() cliExportConfig {
-	return cliExportConfig{Format: "csv", Fields: "compact", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
+	return cliExportConfig{Format: "csv", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: "speed.cloudflare.com/__down?bytes=99999999", DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 0, SpeedMin: 0.1, File: "", SourceURL: "", NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 20, Format: "csv", Fields: "compact", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
+	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: "speed.cloudflare.com/__down?bytes=99999999", DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 0, SpeedMin: 0.1, File: "", SourceURL: "", NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 20, Format: "csv", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
-	return cliExportConfig{Format: c.Format, Fields: c.Fields, GitHub: c.GitHub, GitHubSet: true, GHRepo: c.GHRepo, GHBranch: c.GHBranch, GHPath: c.GHPath, GHMessage: c.GHMessage, GHToken: c.GHToken, GHTokenFile: c.GHTokenFile, GHUpload: c.GHUpload}
+	return cliExportConfig{Format: c.Format, Fields: c.Fields, Custom: c.Custom, GitHub: c.GitHub, GitHubSet: true, GHRepo: c.GHRepo, GHBranch: c.GHBranch, GHPath: c.GHPath, GHMessage: c.GHMessage, GHToken: c.GHToken, GHTokenFile: c.GHTokenFile, GHUpload: c.GHUpload}
 }
 
 type cliExportConfigTemplate struct {
@@ -482,6 +493,9 @@ func mergeCLIExportConfig(dst *cliExportConfig, src cliExportConfig, onlyProvide
 	}
 	if isSet("fields", src.Fields) {
 		dst.Fields = src.Fields
+	}
+	if isSet("custom", src.Custom) {
+		dst.Custom = src.Custom
 	}
 	if (!onlyProvided && src.GitHubSet) || (onlyProvided && len(provided) > 0 && provided[0]["github"]) {
 		dst.GitHub = src.GitHub
@@ -585,7 +599,8 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "nsbspeedmin", Description: "非标模式测速结果阈值，单位 MB/s", Default: "0.1"},
 		{Name: "nsbspeedlimit", Description: "非标模式测速结果上限；0 表示关闭测速", Default: "20"},
 		{Name: "format", Description: "导出/上传内容格式", Default: "csv", Options: []string{"csv", "txt"}},
-		{Name: "fields", Description: "导出字段；支持 compact、all、ipport 或逗号分隔字段 key", Default: "compact", Options: []string{"compact", "all", "ipport", "ipport,dc,loc", "ipport,latency,dc,loc"}},
+		{Name: "fields", Description: "导出字段；支持 compact、all、ipport 或逗号分隔字段 key；自定义字段可写在这里排序", Default: "compact", Options: []string{"compact", "all", "ipport", "ipport,dc,loc", "ipport,latency,dc,loc"}},
+		{Name: "custom", Description: "自定义导出字段，格式 标题:内容，多项用逗号分隔；未在 fields 中排序时默认追加到最后。兼容 key=标题:内容", Default: ""},
 		{Name: "github", Description: "导出后上传到 GitHub", Default: "false", Options: []string{"true", "false"}},
 		{Name: "ghrepo", Description: "GitHub 仓库，格式 owner/repo", Default: ""},
 		{Name: "ghbranch", Description: "GitHub 分支", Default: "main"},
@@ -1100,6 +1115,7 @@ func printCLIConfig(cfg *cliConfig) {
 		{"config", lookupCLIFlagDescription(cliCommonFlags, "config"), cfg.export.ConfigFile, "二进制目录/cfdata-config.json"},
 		{"format", lookupCLIFlagDescription(cliCommonFlags, "format"), cfg.export.Format, "csv"},
 		{"fields", lookupCLIFlagDescription(cliCommonFlags, "fields"), cfg.export.Fields, "compact"},
+		{"custom", lookupCLIFlagDescription(cliCommonFlags, "custom"), cfg.export.Custom, ""},
 		{"github", lookupCLIFlagDescription(cliCommonFlags, "github"), strconv.FormatBool(cfg.export.GitHub), "false"},
 		{"ghrepo", lookupCLIFlagDescription(cliCommonFlags, "ghrepo"), cfg.export.GHRepo, ""},
 		{"ghbranch", lookupCLIFlagDescription(cliCommonFlags, "ghbranch"), cfg.export.GHBranch, "main"},
@@ -1402,7 +1418,9 @@ func writeCLIExportAndMaybeUpload(cfg *cliConfig, rows []cliResultRow, mode stri
 }
 
 func formatCLIResults(rows []cliResultRow, cfg cliExportConfig) (string, error) {
-	fields := resolveCLIFields(cfg.Fields, cfg.Format, rows)
+	customFields := parseCLICustomFields(cfg.Custom)
+	fields := resolveCLIFields(cfg.Fields, cfg.Format, rows, customFields)
+	rows = applyCLICustomFields(rows, customFields)
 	if cfg.Format == "txt" {
 		var b strings.Builder
 		for _, row := range rows {
@@ -1433,7 +1451,7 @@ func formatCLIResults(rows []cliResultRow, cfg cliExportConfig) (string, error) 
 	writer := csv.NewWriter(&b)
 	headers := make([]string, 0, len(fields))
 	for _, field := range fields {
-		headers = append(headers, cliFieldLabel(field))
+		headers = append(headers, cliFieldLabel(field, customFields))
 	}
 	if err := writer.Write(headers); err != nil {
 		return "", err
@@ -1451,22 +1469,43 @@ func formatCLIResults(rows []cliResultRow, cfg cliExportConfig) (string, error) 
 	return b.String(), writer.Error()
 }
 
-func resolveCLIFields(spec, format string, rows []cliResultRow) []string {
+func resolveCLIFields(spec, format string, rows []cliResultRow, customFields []cliCustomField) []string {
 	spec = strings.TrimSpace(strings.ToLower(spec))
+	customByKey := map[string]bool{}
+	for _, field := range customFields {
+		customByKey[field.Key] = true
+	}
+	appendCustomFields := func(fields []string) []string {
+		seen := map[string]bool{}
+		result := make([]string, 0, len(fields)+len(customFields))
+		for _, field := range fields {
+			if field == "" || seen[field] {
+				continue
+			}
+			result = append(result, field)
+			seen[field] = true
+		}
+		for _, field := range customFields {
+			if !seen[field.Key] {
+				result = append(result, field.Key)
+			}
+		}
+		return result
+	}
 	if spec == "" || spec == "compact" {
 		if format == "txt" {
-			return []string{"ipport", "dc", "loc"}
+			return appendCustomFields([]string{"ipport", "dc", "loc"})
 		}
 		if rowsAreOfficial(rows) {
 			if rowsHaveField(rows, "speed") {
-				return []string{"ip", "port", "latency", "speed", "dc", "region", "city"}
+				return appendCustomFields([]string{"ip", "port", "latency", "speed", "dc", "region", "city"})
 			}
-			return []string{"ip", "port", "latency", "dc", "region", "city"}
+			return appendCustomFields([]string{"ip", "port", "latency", "dc", "region", "city"})
 		}
-		return []string{"ip", "port", "tls", "latency", "speed", "outboundIP", "ipType", "dc", "loc", "region", "city", "asnNumber", "asnOrg"}
+		return appendCustomFields([]string{"ip", "port", "tls", "latency", "speed", "outboundIP", "ipType", "dc", "loc", "region", "city", "asnNumber", "asnOrg"})
 	}
 	if spec == "ipport" {
-		return []string{"ipport"}
+		return appendCustomFields([]string{"ipport"})
 	}
 	if spec == "all" {
 		fields := make([]string, 0, len(cliResultFields))
@@ -1481,20 +1520,30 @@ func resolveCLIFields(spec, format string, rows []cliResultRow) []string {
 				}
 			}
 		}
-		return fields
+		return appendCustomFields(fields)
 	}
 	parts := strings.Split(spec, ",")
 	fields := make([]string, 0, len(parts))
+	valid := map[string]string{"ipport": "ipport"}
+	for _, field := range cliResultFields {
+		valid[strings.ToLower(field.Key)] = field.Key
+	}
 	for _, part := range parts {
 		field := strings.TrimSpace(part)
-		if field != "" {
+		fieldLower := strings.ToLower(field)
+		if field != "" && (valid[fieldLower] != "" || customByKey[fieldLower]) {
+			if customByKey[fieldLower] {
+				field = fieldLower
+			} else {
+				field = valid[fieldLower]
+			}
 			fields = append(fields, field)
 		}
 	}
 	if len(fields) == 0 {
-		return []string{"ipport"}
+		return appendCustomFields([]string{"ipport"})
 	}
-	return fields
+	return appendCustomFields(fields)
 }
 
 func rowsAreOfficial(rows []cliResultRow) bool {
@@ -1527,13 +1576,71 @@ func hasAnyCLIField(row cliResultRow, fields ...string) bool {
 	return false
 }
 
-func cliFieldLabel(key string) string {
+func cliFieldLabel(key string, customFields []cliCustomField) string {
+	for _, field := range customFields {
+		if field.Key == key {
+			return field.Label
+		}
+	}
 	for _, field := range cliResultFields {
 		if field.Key == key {
 			return field.Label
 		}
 	}
 	return key
+}
+
+func parseCLICustomFields(spec string) []cliCustomField {
+	parts := strings.Split(spec, ",")
+	fields := make([]cliCustomField, 0, len(parts))
+	seen := map[string]int{}
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		key := ""
+		if keyValue := strings.SplitN(item, "=", 2); len(keyValue) == 2 {
+			key = strings.ToLower(strings.TrimSpace(keyValue[0]))
+			item = strings.TrimSpace(keyValue[1])
+		}
+		labelValue := strings.SplitN(item, ":", 2)
+		if len(labelValue) != 2 || strings.TrimSpace(labelValue[0]) == "" || strings.TrimSpace(labelValue[1]) == "" {
+			continue
+		}
+		label := strings.TrimSpace(labelValue[0])
+		if label == "" {
+			label = key
+		}
+		if key == "" {
+			key = strings.ToLower(label)
+		}
+		baseKey := key
+		if count := seen[baseKey]; count > 0 {
+			for {
+				key = fmt.Sprintf("%s%d", baseKey, count)
+				if seen[key] == 0 {
+					break
+				}
+				count++
+			}
+		}
+		fields = append(fields, cliCustomField{Key: key, Label: label, Value: strings.TrimSpace(labelValue[1])})
+		seen[baseKey]++
+		if key != baseKey {
+			seen[key]++
+		}
+	}
+	return fields
+}
+
+func applyCLICustomFields(rows []cliResultRow, fields []cliCustomField) []cliResultRow {
+	if len(fields) == 0 {
+		return rows
+	}
+	for _, row := range rows {
+		for _, field := range fields {
+			row[field.Key] = field.Value
+		}
+	}
+	return rows
 }
 
 func officialScanRows(scanResults []ScanResult) []cliResultRow {
@@ -1704,7 +1811,13 @@ func uploadCLIExportToGitHub(cfg *cliConfig, content string) error {
 		return fmt.Errorf("启用 -github 时需要 -ghtoken、-ghtokenfile、CFDATA_GHTOKEN 或 GITHUB_TOKEN")
 	}
 	params := githubUploadRequest{Token: cfg.export.GHToken, Owner: parts[0], Repo: parts[1], Branch: cfg.export.GHBranch, Path: cfg.export.GHPath, Message: cfg.export.GHMessage, Content: content}
-	downloadURL, err := uploadGitHubContent(context.Background(), params)
+	downloadURL, err := uploadGitHubContentWithRetry(context.Background(), params, func(attempt, total int, err error) {
+		if err == nil {
+			fmt.Printf("%s[github]%s upload attempt %d/%d\n", ansiYellow, ansiReset, attempt, total)
+			return
+		}
+		fmt.Printf("%s[github]%s upload attempt %d/%d failed: %s\n", ansiRed, ansiReset, attempt, total, err.Error())
+	})
 	if err != nil {
 		return err
 	}
