@@ -22,6 +22,7 @@ func safeGo(label string, session *appSession, fn func()) {
 			if r := recover(); r != nil {
 				msg := fmt.Sprintf("%s panic: %v", label, r)
 				fmt.Printf("%s\n%s\n", msg, debug.Stack())
+				recordProgramDebugError("panic", fmt.Sprintf("%s\n%s", msg, debug.Stack()))
 				if session != nil {
 					session.sendWSMessage("error", "内部错误: "+msg)
 				}
@@ -33,6 +34,11 @@ func safeGo(label string, session *appSession, fn func()) {
 
 func (s *appSession) sendWSMessage(msgType string, data interface{}) {
 	if s.emit != nil {
+		if msgType == "error" || msgType == "github_upload_error" {
+			recordProgramDebugError(msgType, data)
+		} else if msgType == "log" || msgType == "github_upload_status" || msgType == "version_info" {
+			recordDebugNotice(msgType, data)
+		}
 		s.emit(msgType, data)
 		return
 	}
@@ -48,9 +54,15 @@ func (s *appSession) sendWSMessage(msgType string, data interface{}) {
 		"type": msgType,
 		"data": data,
 	}
+	if msgType == "error" || msgType == "github_upload_error" {
+		recordProgramDebugError(msgType, data)
+	} else if msgType == "log" || msgType == "github_upload_status" || msgType == "version_info" {
+		recordDebugNotice(msgType, data)
+	}
 	s.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if err := s.ws.WriteJSON(msg); err != nil {
 		s.wsClosed = true
+		recordProgramDebugError("websocket_write", err.Error())
 		sendLog("WebSocket 发送失败: " + err.Error())
 	}
 }
@@ -65,7 +77,14 @@ func (s *appSession) startTask(run taskStarter) {
 	}
 	safeGo("task", s, func() {
 		defer cancel()
-		defer s.endTask()
+		defer func() {
+			s.endTask()
+			if ctx.Err() != nil {
+				s.sendWSMessage("task_stopped", nil)
+				return
+			}
+			s.sendWSMessage("task_complete", nil)
+		}()
 		run(ctx, s)
 	})
 }

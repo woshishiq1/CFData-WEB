@@ -74,7 +74,7 @@ type cliFileConfig struct {
 	NoColor       bool    `json:"nocolor"`
 	URL           string  `json:"url"`
 	DNS           string  `json:"dns"`
-	Debug         bool    `json:"debug"`
+	Debug         any     `json:"debug"`
 	CompactIPv4   bool    `json:"compactipv4"`
 	TestPort      int     `json:"testport"`
 	Delay         int     `json:"delay"`
@@ -171,7 +171,7 @@ var (
 		{name: "nocolor", description: "禁用颜色输出（cmd 等不支持 ANSI 的终端可开启避免乱码）", defaultValue: "false"},
 		{name: "url", description: "测速下载地址", defaultValue: "speed.cloudflare.com/__down?bytes=99999999"},
 		{name: "dns", description: "自定义 DNS 服务器，例如 1.1.1.1 或 223.5.5.5,8.8.8.8；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS", defaultValue: defaultDNSServers},
-		{name: "debug", description: "是否开启调试输出", defaultValue: "false"},
+		{name: "debug", description: "调试输出等级：error、all；true 等同 error", defaultValue: "false"},
 		{name: "compactipv4", description: "精简本地 IPv4 地址库：按 /24 子网测 TCP:80 连通性并覆盖 ips-v4.txt", defaultValue: "false"},
 		{name: "config", description: "CLI 配置文件路径，不存在时在二进制目录自动生成模板", defaultValue: "二进制目录/cfdata-config.json"},
 		{name: "format", description: "CLI 导出格式：csv 或 txt", defaultValue: "csv"},
@@ -429,7 +429,9 @@ func applyCLIEnvConfig(cfg *cliConfig, provided map[string]bool) {
 		customDNSServer = strings.TrimSpace(os.Getenv("CFDATA_DNS"))
 		customDNSForced = true
 	}
-	setBool("debug", "CFDATA_DEBUG", &debugMode)
+	if !provided["debug"] && strings.TrimSpace(os.Getenv("CFDATA_DEBUG")) != "" {
+		_ = setDebugFlag(os.Getenv("CFDATA_DEBUG"))
+	}
 	setBool("compactipv4", "CFDATA_COMPACTIPV4", &cfg.compactIPv4)
 	setInt("testport", "CFDATA_TESTPORT", &cfg.port)
 	setInt("delay", "CFDATA_DELAY", &cfg.delay)
@@ -461,6 +463,7 @@ func (c cliFileConfig) Export() cliExportConfig {
 }
 
 type cliExportConfigTemplate struct {
+	ConfigVersion   any              `json:"_config_version"`
 	Config          cliFileConfig    `json:"config"`
 	Description     string           `json:"_description"`
 	Priority        string           `json:"_priority"`
@@ -531,25 +534,7 @@ func loadOrCreateCLIConfig(path string) (cliFileConfig, bool, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			return cliFileConfig{}, false, err
 		}
-		template := cliExportConfigTemplate{
-			Config:          defaultCLIFileConfig(),
-			Description:     "CFData CLI 全量配置；真正配置项在 config 内。",
-			Priority:        "命令行参数 > 配置文件 > 环境变量 > 默认值",
-			Usage:           "首次生成后建议退出并编辑本文件，再重新运行测试。布尔值使用 true/false。",
-			ConfigHelp:      buildCLIConfigHelp(),
-			FormatValues:    []string{"csv", "txt"},
-			FieldsValues:    []string{"compact", "all", "ipport", "ipport,dc,loc", "ipport,latency,dc,loc"},
-			ModeValues:      []string{"official", "nsb"},
-			AvailableFields: cliResultFields,
-		}
-		var buf strings.Builder
-		encoder := json.NewEncoder(&buf)
-		encoder.SetIndent("", "  ")
-		encoder.SetEscapeHTML(false)
-		if err := encoder.Encode(template); err != nil {
-			return cliFileConfig{}, false, err
-		}
-		if err := os.WriteFile(path, []byte(buf.String()), 0600); err != nil {
+		if err := writeCLIConfigTemplate(path, defaultCLIFileConfig()); err != nil {
 			return cliFileConfig{}, false, err
 		}
 		return cliFileConfig{}, true, nil
@@ -563,12 +548,71 @@ func loadOrCreateCLIConfig(path string) (cliFileConfig, bool, error) {
 		return cfg, false, nil
 	}
 	template := cliExportConfigTemplate{Config: defaultCLIFileConfig()}
+	needsRewrite := false
 	if err := json.Unmarshal(data, &template); err == nil && (template.Config.Mode != "" || template.Config.Format != "" || template.Description != "") {
 		cfg = template.Config
+		needsRewrite = cliConfigVersionIsOld(template.ConfigVersion)
 	} else if err := json.Unmarshal(data, &cfg); err != nil {
 		return cliFileConfig{}, false, fmt.Errorf("解析配置文件失败 %s: %w", path, err)
+	} else {
+		needsRewrite = true
+	}
+	cfg = migrateCLIFileConfig(cfg, template.ConfigVersion)
+	if needsRewrite {
+		if err := writeCLIConfigTemplate(path, cfg); err != nil {
+			return cliFileConfig{}, false, err
+		}
 	}
 	return cfg, false, nil
+}
+
+func newCLIConfigTemplate(cfg cliFileConfig) cliExportConfigTemplate {
+	return cliExportConfigTemplate{
+		ConfigVersion:   appVersion,
+		Config:          cfg,
+		Description:     "CFData CLI 全量配置；真正配置项在 config 内。",
+		Priority:        "命令行参数 > 配置文件 > 环境变量 > 默认值",
+		Usage:           "首次生成后建议退出并编辑本文件，再重新运行测试。debug 支持 false、error、all、true。",
+		ConfigHelp:      buildCLIConfigHelp(),
+		FormatValues:    []string{"csv", "txt"},
+		FieldsValues:    []string{"compact", "all", "ipport", "ipport,dc,loc", "ipport,latency,dc,loc"},
+		ModeValues:      []string{"official", "nsb"},
+		AvailableFields: cliResultFields,
+	}
+}
+
+func writeCLIConfigTemplate(path string, cfg cliFileConfig) error {
+	template := newCLIConfigTemplate(cfg)
+	var buf strings.Builder
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(template); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(buf.String()), 0600)
+}
+
+func migrateCLIFileConfig(cfg cliFileConfig, version any) cliFileConfig {
+	if cliConfigVersionIsOld(version) {
+		if v, ok := cfg.Debug.(bool); ok && v {
+			cfg.Debug = "error"
+		}
+	}
+	return cfg
+}
+
+func cliConfigVersionIsOld(version any) bool {
+	switch v := version.(type) {
+	case string:
+		return strings.TrimSpace(v) == "" || strings.TrimSpace(v) != appVersion
+	case float64:
+		return v < 2
+	case int:
+		return v < 2
+	default:
+		return true
+	}
 }
 
 func buildCLIConfigHelp() []cliConfigHelp {
@@ -583,7 +627,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "nocolor", Description: "禁用 ANSI 颜色输出", Default: "false", Options: []string{"true", "false"}},
 		{Name: "url", Description: "测速下载地址，不含协议前缀", Default: "speed.cloudflare.com/__down?bytes=99999999"},
 		{Name: "dns", Description: "自定义 DNS 服务器；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS。用于 IP 库、locations、ASN、GitHub、网络 URL 输入等需要 DNS 的外部请求", Default: defaultDNSServers},
-		{Name: "debug", Description: "开启调试输出和失败明细", Default: "false", Options: []string{"true", "false"}},
+		{Name: "debug", Description: "调试输出等级；error 记录程序错误和下载/更新/API 异常，all 额外包含测速失败等全部明细", Default: "false", Options: []string{"false", "error", "all", "true"}},
 		{Name: "compactipv4", Description: "精简本地 IPv4 地址库并覆盖 ips-v4.txt", Default: "false", Options: []string{"true", "false"}},
 		{Name: "testport", Description: "官方模式详细测试与测速端口", Default: "443"},
 		{Name: "delay", Description: "延迟阈值，单位毫秒", Default: "500"},
@@ -658,7 +702,7 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 		customDNSForced = true
 	}
 	if !provided["debug"] {
-		debugMode = fileCfg.Debug
+		applyConfigDebug(fileCfg.Debug)
 	}
 	if !provided["compactipv4"] {
 		cfg.compactIPv4 = fileCfg.CompactIPv4
@@ -723,6 +767,21 @@ func parseBoolEnv(value string) bool {
 	}
 }
 
+func applyConfigDebug(value any) {
+	switch v := value.(type) {
+	case bool:
+		if v {
+			_ = setDebugFlag("error")
+		} else {
+			_ = setDebugFlag("false")
+		}
+	case string:
+		_ = setDebugFlag(v)
+	default:
+		_ = setDebugFlag("false")
+	}
+}
+
 func newCLISession(cfg *cliConfig) *appSession {
 	session := &appSession{progressState: map[string][2]int{}}
 	session.emit = func(msgType string, data interface{}) {
@@ -741,6 +800,7 @@ func handleCLIMessage(cfg *cliConfig, session *appSession, msgType string, data 
 	case "log":
 		fmt.Println(data)
 	case "error":
+		recordProgramDebugError("cli_message_error", data)
 		fmt.Fprintln(os.Stderr, colorize(fmt.Sprint(data), ansiRed))
 	case "scan_progress":
 		if cfg.showProgress {
@@ -1005,6 +1065,7 @@ func runNSBCLI(cfg *cliConfig) error {
 	rows = filterCLIResultRowsByIPType(rows, cfg.nsbIPType)
 	rows = filterCLIResultRowsByQualification(rows, cfg.nsbQualified, cfg.speedTest > 0 && cfg.nsbSpeedLimit > 0, cfg.nsbSpeedMin)
 	if len(rows) == 0 {
+		fmt.Printf("%s[nsb]%s 没有符合导出条件的结果\n", ansiYellow, ansiReset)
 		return nil
 	}
 	return writeCLIExportAndMaybeUpload(cfg, rows, "nsb")
@@ -1041,48 +1102,13 @@ func pickBestDataCenter(scanResults []ScanResult) string {
 }
 
 func runOfficialSpeedTests(ctx context.Context, session *appSession, results []TestResult, port int, limit int, speedMinMB float64) []TestResult {
-	capacity := len(results)
-	if limit > 0 && limit < capacity {
-		capacity = limit
-	}
-	qualified := make([]TestResult, 0, capacity)
-	interSpeedPause := func() bool {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-time.After(1200 * time.Millisecond):
-			return true
+	_, qualified := runOfficialSpeedTestsCore(ctx, results, port, limit, speedMinMB, speedTestURL, func(current, total, qualifiedCount int, result TestResult) {
+		setCLIProgress(session, "speed", current, total)
+		fmt.Printf("%s[speed]%s %s %s:%d %s\n", ansiMagenta, ansiReset, renderCLIProgress(session, "speed"), result.IP, port, colorizeSpeedString(result.Speed))
+		if speedMB, ok := parseSpeedMBForSort(result.Speed); ok && speedMB >= speedMinMB {
+			fmt.Printf("%s[official]%s 达标 %d/%d\n", ansiGreen, ansiReset, qualifiedCount, limit)
 		}
-	}
-	for i := range results {
-		select {
-		case <-ctx.Done():
-			return qualified
-		default:
-		}
-		setCLIProgress(session, "speed", i+1, len(results))
-		if limit > 0 && len(qualified) >= limit {
-			break
-		}
-		speedMB, speedErr := runWindowedSpeedTest(ctx, results[i].IP, port, speedTestURL)
-		if speedErr != "" {
-			results[i].Speed = speedErr
-			fmt.Printf("%s[speed]%s %s %s:%d %s\n", ansiMagenta, ansiReset, renderCLIProgress(session, "speed"), results[i].IP, port, colorizeSpeedString(speedErr))
-			if !interSpeedPause() {
-				return qualified
-			}
-			continue
-		}
-		results[i].Speed = fmt.Sprintf("%.2fMB/s", speedMB)
-		fmt.Printf("%s[speed]%s %s %s:%d %s\n", ansiMagenta, ansiReset, renderCLIProgress(session, "speed"), results[i].IP, port, colorizeSpeedString(results[i].Speed))
-		if speedMB >= speedMinMB {
-			qualified = append(qualified, results[i])
-			fmt.Printf("%s[official]%s 达标 %d/%d\n", ansiGreen, ansiReset, len(qualified), limit)
-		}
-		if !interSpeedPause() {
-			return qualified
-		}
-	}
+	})
 	return qualified
 }
 
@@ -1114,7 +1140,7 @@ func printCLIConfig(cfg *cliConfig) {
 		{"progress", lookupCLIFlagDescription(cliCommonFlags, "progress"), strconv.FormatBool(cfg.showProgress), "true"},
 		{"nocolor", lookupCLIFlagDescription(cliCommonFlags, "nocolor"), strconv.FormatBool(cfg.noColor), "false"},
 		{"url", lookupCLIFlagDescription(cliCommonFlags, "url"), speedTestURL, "speed.cloudflare.com/__down?bytes=99999999"},
-		{"debug", lookupCLIFlagDescription(cliCommonFlags, "debug"), strconv.FormatBool(debugMode), "false"},
+		{"debug", lookupCLIFlagDescription(cliCommonFlags, "debug"), debugFlagValue{}.String(), "false"},
 		{"compactipv4", lookupCLIFlagDescription(cliCommonFlags, "compactipv4"), strconv.FormatBool(cfg.compactIPv4), "false"},
 		{"config", lookupCLIFlagDescription(cliCommonFlags, "config"), cfg.export.ConfigFile, "二进制目录/cfdata-config.json"},
 		{"format", lookupCLIFlagDescription(cliCommonFlags, "format"), cfg.export.Format, "csv"},

@@ -44,7 +44,7 @@ func scanOfficialIP(ctx context.Context, ip string, port int) *ScanResult {
 	}
 
 	client := http.Client{
-		Transport: transport,
+		Transport: wrapDebugTransport("official-trace", transport),
 		Timeout:   3 * time.Second,
 	}
 
@@ -198,6 +198,11 @@ func runOfficialTask(ctx context.Context, session *appSession, ipType int, scanM
 		if res == nil {
 			return
 		}
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 
 		session.scanMutex.Lock()
 		session.scanResults = append(session.scanResults, *res)
@@ -215,6 +220,10 @@ func runOfficialTask(ctx context.Context, session *appSession, ipType int, scanM
 	session.scanMutex.Unlock()
 
 	if resultsCount == 0 {
+		if wasCanceled || ctx.Err() != nil {
+			session.sendWSMessage("log", "扫描任务已终止，当前没有可整理的有效 IP。")
+			return
+		}
 		session.sendWSMessage("error", "扫描结束或被终止，但未发现任何有效IP。")
 		return
 	}
@@ -268,7 +277,11 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 	session.scanMutex.Unlock()
 
 	if len(testIPList) == 0 {
-		session.sendWSMessage("error", "没有找到可测试的 IP 地址")
+		if strings.TrimSpace(selectedDC) == "" {
+			session.sendWSMessage("error", "没有找到可测试的 IP 地址")
+		} else {
+			session.sendWSMessage("error", fmt.Sprintf("数据中心 %s 未找到可测试的 IP 地址", selectedDC))
+		}
 		return
 	}
 
@@ -299,6 +312,11 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 		if res == nil {
 			return
 		}
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		if scan, ok := scanByIP[ip]; ok {
 			res.DataCenter = scan.DataCenter
 			res.Region = scan.Region
@@ -313,6 +331,7 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 
 	if wasCanceled || ctx.Err() != nil {
 		session.sendWSMessage("log", "详细测试已被终止，正在呈现当前可用测试结果...")
+		return
 	}
 
 	sort.Slice(results, func(i, j int) bool {
@@ -329,6 +348,10 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 		}
 		return results[i].AvgLatency < results[j].AvgLatency
 	})
+
+	session.testMutex.Lock()
+	session.testResults = append([]TestResult(nil), results...)
+	session.testMutex.Unlock()
 
 	session.sendWSMessage("test_complete", results)
 }

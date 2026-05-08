@@ -26,6 +26,14 @@ type startSpeedTestRequest struct {
 	URL  string `json:"url"`
 }
 
+type startOfficialSpeedBatchRequest struct {
+	Port       int          `json:"port"`
+	URL        string       `json:"url"`
+	SpeedMin   float64      `json:"speedMin"`
+	SpeedLimit int          `json:"speedLimit"`
+	Results    []TestResult `json:"results"`
+}
+
 type startNSBTaskRequest struct {
 	FileName    string  `json:"fileName"`
 	FileContent string  `json:"fileContent"`

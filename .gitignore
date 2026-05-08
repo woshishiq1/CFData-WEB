@@ -4,6 +4,7 @@ dist/
 coverage.out
 *.coverprofile
 *.log
+cfdata-debug.log
 *.out
 .env
 .env.*

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,13 +72,14 @@ func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int, t
 	start = time.Now()
 	httpCtx, httpCancel := context.WithTimeout(ctx, maxDuration)
 	defer httpCancel()
-	client := http.Client{
-		Transport: &http.Transport{
-			Dial: func(network, addr string) (net.Conn, error) {
-				return conn, nil
-			},
-			TLSClientConfig: tlsConfigWithRootCAs("speed.cloudflare.com"),
+	transport := &http.Transport{
+		Dial: func(network, addr string) (net.Conn, error) {
+			return conn, nil
 		},
+		TLSClientConfig: tlsConfigWithRootCAs("speed.cloudflare.com"),
+	}
+	client := http.Client{
+		Transport: wrapDebugTransport("nsb-trace", transport),
 	}
 	req, err := http.NewRequestWithContext(httpCtx, "GET", protocol+requestURL, nil)
 	if err != nil {
@@ -194,8 +194,17 @@ func runNSBScanWorkers(ctx context.Context, total, maxWorkers, resultLimit int, 
 	worker := func() {
 		defer wg.Done()
 		for idx := range jobs {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			acceptedTotal := work(idx)
-			completion <- acceptedTotal
+			select {
+			case completion <- acceptedTotal:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 
@@ -207,6 +216,9 @@ func runNSBScanWorkers(ctx context.Context, total, maxWorkers, resultLimit int, 
 
 	next := 0
 	for next < total {
+		if wasCanceled {
+			break
+		}
 		mu.Lock()
 		shouldStop := resultLimit > 0 && accepted+inFlight >= resultLimit
 		mu.Unlock()
@@ -236,6 +248,10 @@ func runNSBScanWorkers(ctx context.Context, total, maxWorkers, resultLimit int, 
 		}
 	}
 	close(jobs)
+	if wasCanceled {
+		wg.Wait()
+		return true
+	}
 	for {
 		mu.Lock()
 		remaining := inFlight
@@ -280,14 +296,15 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
 		return 0, "测速地址解析失败: " + err.Error()
 	}
 
-	client := http.Client{
-		Transport: &http.Transport{
-			DialContext: func(c context.Context, network, addr string) (net.Conn, error) {
-				return dialContextWithTimeout(c, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)), 5*time.Second)
-			},
-			TLSHandshakeTimeout: 10 * time.Second,
-			TLSClientConfig:     tlsConfigWithRootCAs(parsedURL.Hostname()),
+	transport := &http.Transport{
+		DialContext: func(c context.Context, network, addr string) (net.Conn, error) {
+			return dialContextWithTimeout(c, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)), 5*time.Second)
 		},
+		TLSHandshakeTimeout: 10 * time.Second,
+		TLSClientConfig:     tlsConfigWithRootCAs(parsedURL.Hostname()),
+	}
+	client := http.Client{
+		Transport: wrapDebugTransport("nsb-speed", transport),
 	}
 
 	fullURL := fmt.Sprintf("%s://%s%s", parsedURL.Scheme, parsedURL.Host, parsedURL.RequestURI())
@@ -431,13 +448,11 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	var failMutex sync.Mutex
 	if debugMode {
 		failures = make([]nsbFailureRecord, 0, len(ips))
-		failureCSVFile := buildNSBFailureCSVName(outFile)
 		defer func() {
-			if err := writeNSBFailureCSV(failureCSVFile, failures); err != nil {
-				session.sendWSMessage("log", "写入非标失败明细 CSV 失败: "+err.Error())
-				return
+			for _, failure := range sortedNSBFailures(failures) {
+				recordAllDebugError("nsb_failure", fmt.Sprintf("ip=%s port=%s phase=%s reason=%s detail=%s", failure.ipAddr, failure.port, failure.phase, failure.reason, failure.detail))
 			}
-			session.sendWSMessage("log", fmt.Sprintf("非标失败明细已导出: %s (失败 %d 条)", failureCSVFile, len(failures)))
+			session.sendWSMessage("log", fmt.Sprintf("非标失败明细已写入 debug log (失败 %d 条)", len(failures)))
 		}()
 	}
 
@@ -491,7 +506,7 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	completionMessage := "测试完成"
 	qualifiedCount := 0
 	if speedTest > 0 && speedLimit > 0 {
-		session.sendWSMessage("log", fmt.Sprintf("开始测速：%d 条记录，线程数=%d", len(nsbResults), speedTest))
+		session.sendWSMessage("log", fmt.Sprintf("开始测速：%d 条记录，线程数=%d，测速目标上限=%d，测速阈值=%.2fMB/s", len(nsbResults), speedTest, speedLimit, speedMin))
 
 		total := len(nsbResults)
 		reportNSBProgress(session, "speed", 0, total, "速度测试")
@@ -580,7 +595,17 @@ func runNSBSpeedWorkers(ctx context.Context, results []iptestResult, maxWorkers,
 	worker := func() {
 		defer wg.Done()
 		for idx := range jobs {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			speed, speedErr := work(idx)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			results[idx].downloadSpeed = speed
 			results[idx].speedTested = true
 			if speedErr != "" {
@@ -589,7 +614,11 @@ func runNSBSpeedWorkers(ctx context.Context, results []iptestResult, maxWorkers,
 				results[idx].speedText = fmt.Sprintf("%.2fMB/s", speed/1024)
 				results[idx].speedQualified = speed/1024 >= speedMin
 			}
-			done <- speedDone{idx: idx, err: speedErr}
+			select {
+			case done <- speedDone{idx: idx, err: speedErr}:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 
@@ -617,6 +646,9 @@ func runNSBSpeedWorkers(ctx context.Context, results []iptestResult, maxWorkers,
 		case <-ctx.Done():
 			wasCanceled = true
 			next = len(results)
+			close(jobs)
+			wg.Wait()
+			return true
 		case item := <-done:
 			inFlight--
 			completed++
@@ -741,52 +773,15 @@ func fallbackDash(value string) string {
 	return value
 }
 
-func buildNSBFailureCSVName(outFile string) string {
-	safeOut := safeFilename(outFile)
-	ext := filepath.Ext(safeOut)
-	name := strings.TrimSuffix(safeOut, ext)
-	if name == "" {
-		name = "ip"
-	}
-	if ext == "" {
-		ext = ".csv"
-	}
-	return name + "_failures" + ext
-}
-
-func writeNSBFailureCSV(outFile string, failures []nsbFailureRecord) error {
-	outFile = safeFilename(outFile)
-	file, err := os.Create(outFile)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	if err := writeUTF8BOM(file); err != nil {
-		os.Remove(outFile)
-		return err
-	}
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	if err := writer.Write([]string{"IP", "端口", "阶段", "失败原因", "错误详情"}); err != nil {
-		return err
-	}
-
-	sort.SliceStable(failures, func(i, j int) bool {
-		if failures[i].index == failures[j].index {
-			return failures[i].phase < failures[j].phase
+func sortedNSBFailures(failures []nsbFailureRecord) []nsbFailureRecord {
+	next := append([]nsbFailureRecord(nil), failures...)
+	sort.SliceStable(next, func(i, j int) bool {
+		if next[i].index == next[j].index {
+			return next[i].phase < next[j].phase
 		}
-		return failures[i].index < failures[j].index
+		return next[i].index < next[j].index
 	})
-
-	for _, failure := range failures {
-		if err := writer.Write([]string{failure.ipAddr, failure.port, failure.phase, failure.reason, failure.detail}); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return next
 }
 
 func formatHTTPFailureDetail(status string, body []byte) string {

@@ -1253,6 +1253,25 @@
                     <span class="label">⏱️ 延迟阈值 (ms)</span>
                     <input id="testDelay" type="number" value="500" placeholder="默认 500">
                 </div>
+                <div class="option-item">
+                    <span class="label">📉 测速阈值</span>
+                    <input id="officialSpeedMin" type="number" value="0.1" step="0.01" placeholder="默认 0.1MB/s">
+                </div>
+                <div class="option-item">
+                    <span class="label">🏁 结果上限</span>
+                    <input id="officialSpeedLimit" type="number" value="20" placeholder="0 关闭测速">
+                </div>
+                <div class="option-item">
+                    <span class="label">🧪 开启自动测速</span>
+                    <select id="officialAutoSpeed" onchange="updateOfficialAutoSpeedControls()">
+                        <option value="off" selected>关闭</option>
+                        <option value="on">开启</option>
+                    </select>
+                </div>
+                <div class="option-item">
+                    <span class="label">🏢 数据中心</span>
+                    <input id="officialTargetDC" type="text" value="" placeholder="留空自动选择" disabled>
+                </div>
                 <div class="option-item full-width">
                     <span class="label">🔗 测速网址</span>
                     <div class="field-with-action">
@@ -1430,7 +1449,15 @@
             <div class="section-box">
                 <h3 style="display:flex;justify-content:space-between;align-items:center;">
                     <span>详细测试结果 <span class="badge" id="testCount">0</span></span>
-                    <button class="action-btn export-btn" onclick="openResultModal('test')">📥 结果操作</button>
+                    <span class="table-actions">
+                        <select id="officialTestQualifiedFilter" class="table-filter-select" style="display:inline-block;" onchange="setOfficialTestQualifiedFilter(this.value)">
+                            <option value="all" selected>展示全部结果</option>
+                            <option value="qualified">仅展示合格</option>
+                            <option value="unqualified">仅展示不合格</option>
+                        </select>
+                        <button class="action-btn export-btn" id="btnBatchSpeed" onclick="startOfficialBatchSpeed(false)" disabled>🚀 一键测速</button>
+                        <button class="action-btn export-btn" onclick="openResultModal('test')">📥 结果操作</button>
+                    </span>
                 </h3>
                 <div class="scroll-table" style="max-height:520px;">
                     <table id="testTable">
@@ -1581,6 +1608,7 @@
         let ws;
         let defaultSpeedTestUrl = "speed.cloudflare.com/__down?bytes=99999999";
         let isTaskRunning = false;
+        let isStoppingTask = false;
         let scanData = [];
         let testData = [];
         let dcList = [];
@@ -1595,11 +1623,20 @@
         let nsbRows = [];
         let nsbLiveRows = [];
         let nsbLiveIndex = {};
+        let nsbLiveRenderTimer = null;
         let nsbCompactView = true;
         let nsbTableIPTypeFilter = 'all';
         let nsbTableQualifiedFilter = 'all';
         let nsbSpeedMinValue = 0;
         let nsbSpeedEnabledForResults = false;
+        let officialTestQualifiedFilter = 'all';
+        let officialSpeedMinValue = 0.1;
+        let officialSpeedEnabledForResults = false;
+        let officialAutoSpeedPending = false;
+        let officialAutoStage = '';
+        let officialBatchSpeedRunning = false;
+        let webDebugMode = false;
+        let webDebugErrors = [];
         let currentSpeedTestingIP = '';
         let runningTaskLabel = '';
         let runningTaskMode = '';
@@ -1723,6 +1760,16 @@
 
         function initializeUI() {
             updateNSBSpeedControls();
+            updateOfficialAutoSpeedControls();
+            updateBatchSpeedButton();
+        }
+
+        function updateOfficialAutoSpeedControls() {
+            const autoSpeed = document.getElementById('officialAutoSpeed');
+            const targetDC = document.getElementById('officialTargetDC');
+            if (!autoSpeed || !targetDC) return;
+            targetDC.disabled = String(autoSpeed.value || 'off').toLowerCase() !== 'on';
+            if (targetDC.disabled) targetDC.value = '';
         }
 
         function updateNSBSpeedControls() {
@@ -1765,16 +1812,41 @@
 
         function wsSend(payload) {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
+                recordWebDebugError('ws_send', 'WebSocket 未连接');
                 return false;
             }
             try {
                 ws.send(JSON.stringify(payload));
                 return true;
             } catch (e) {
+                recordWebDebugError('ws_send', e && e.message ? e.message : String(e));
                 console.error('ws.send failed:', e);
                 return false;
             }
         }
+
+        function recordWebDebugError(source, detail) {
+            if (!webDebugMode) return;
+            const entry = { time: new Date().toISOString(), source, detail: String(detail || '') };
+            webDebugErrors.push(entry);
+            if (webDebugErrors.length > 200) webDebugErrors.shift();
+            console.error('[cfdata-debug]', entry);
+        }
+
+        function recordWebDebugNotice(source, detail) {
+            const text = String(detail || '');
+            if (!/(错误|失败|异常|超时|终止|跳过|未找到|未发现|无效|为空|不匹配|无法|损坏|重试|未就绪|警告|提醒|⚠|panic|error|fail|failed|timeout|invalid|empty|not found|skip|retry|warning|warn|refused|reset|denied|429|500|502|503|504)/i.test(text)) return;
+            recordWebDebugError(source, text);
+        }
+
+        window.addEventListener('error', (event) => {
+            recordWebDebugError('window_error', `${event.message || '脚本错误'} ${event.filename || ''}:${event.lineno || 0}:${event.colno || 0}`);
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            const reason = event.reason && event.reason.message ? event.reason.message : String(event.reason || 'unhandled rejection');
+            recordWebDebugError('unhandled_rejection', reason);
+        });
 
         function startCompactIPv4() {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -1840,6 +1912,7 @@
                     const msg = JSON.parse(event.data);
                     handleMessage(msg);
                 } catch (e) {
+                    recordWebDebugError('ws_message_parse', e && e.message ? e.message : String(e));
                     console.error('WebSocket message parse error:', e);
                 }
             };
@@ -1857,6 +1930,7 @@
         }
 
         function log(text) {
+            recordWebDebugNotice('web_log', text);
             const box = document.getElementById('logBox');
             const div = document.createElement('div');
             const span = document.createElement('span');
@@ -1933,8 +2007,7 @@
                 renderAllTestResults();
             } else if (currentMode === 'official' && tabId === 'scan' && scanData.length) {
                 renderScanHeaders('official');
-                scanData.forEach(renderScanRowOfficial);
-                updateBadge('scanCount', scanData.length);
+                sortAndRenderScanResults();
             }
         }
 
@@ -1994,8 +2067,7 @@
             switchTab('scan');
             if (runningTaskMode === 'official') {
                 renderScanHeaders('official');
-                scanData.forEach(renderScanRowOfficial);
-                updateBadge('scanCount', scanData.length);
+                sortAndRenderScanResults();
             } else if (nsbRows.length) {
                 renderScanRowsCSV(nsbHeaders, nsbRows);
             } else {
@@ -2007,6 +2079,7 @@
 
         function finishRunningTask(buttonText = '✨ 开始扫描与测试') {
             isTaskRunning = false;
+            isStoppingTask = false;
             clearRunningTaskLabel();
             resetButton(buttonText);
         }
@@ -2015,11 +2088,13 @@
             const btn = document.getElementById('btnStart');
             const lb = document.getElementById('btnStartLabel');
             const sp = document.getElementById('btnStartSpinner');
+            if (!btn || !lb) return;
             lb.textContent = text;
             if (sp) sp.classList.add('hidden');
             btn.style.background = 'linear-gradient(135deg, var(--primary-color), #2563eb)';
             btn.style.boxShadow = '0 4px 12px rgba(59,130,246,.3), inset 0 1px 1px rgba(255,255,255,0.2)';
             btn.disabled = false;
+            window.setTimeout(updateBatchSpeedButton, 0);
         }
 
         function renderScanHeaders(mode) {
@@ -2040,9 +2115,15 @@
             const wrap = document.getElementById('nsbCompactToggleWrap');
             if (wrap) wrap.style.display = currentMode === 'nsb' ? 'inline-flex' : 'none';
             const filter = document.getElementById('nsbTableIPTypeFilter');
-            if (filter) filter.style.display = currentMode === 'nsb' ? 'inline-block' : 'none';
+            if (filter) {
+                filter.style.display = currentMode === 'nsb' ? 'inline-block' : 'none';
+                filter.value = nsbTableIPTypeFilter;
+            }
             const qualifiedFilter = document.getElementById('nsbTableQualifiedFilter');
-            if (qualifiedFilter) qualifiedFilter.style.display = currentMode === 'nsb' ? 'inline-block' : 'none';
+            if (qualifiedFilter) {
+                qualifiedFilter.style.display = currentMode === 'nsb' ? 'inline-block' : 'none';
+                qualifiedFilter.value = nsbTableQualifiedFilter;
+            }
         }
 
         function setNSBCompactView(enabled) {
@@ -2057,8 +2138,11 @@
         }
 
         function setNSBTableIPTypeFilter(value) {
-            nsbTableIPTypeFilter = normalizeIPTypeFilter(value);
-            if (currentMode !== 'nsb') return;
+            const normalized = normalizeIPTypeFilter(value);
+            if (currentMode === 'official') {
+                return;
+            }
+            nsbTableIPTypeFilter = normalized;
             if (nsbRows.length) {
                 renderScanRowsCSV(nsbHeaders, nsbRows);
                 return;
@@ -2067,8 +2151,11 @@
         }
 
         function setNSBTableQualifiedFilter(value) {
-            nsbTableQualifiedFilter = normalizeQualifiedFilter(value);
-            if (currentMode !== 'nsb') return;
+            const normalized = normalizeQualifiedFilter(value);
+            if (currentMode === 'official') {
+                return;
+            }
+            nsbTableQualifiedFilter = normalized;
             if (nsbRows.length) {
                 renderScanRowsCSV(nsbHeaders, nsbRows);
                 return;
@@ -2083,6 +2170,34 @@
             // 修改点：为 copyToClipboard 增加 event 参数，以便定位提示文字
             const html = `<tr><td>${renderIPCell(row.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
             tbody.insertAdjacentHTML('beforeend', html);
+        }
+
+        function getOfficialIPType(row) {
+            const ip = String(row?.IP || row?.ip || '').trim();
+            return ip.includes(':') ? 'ipv6' : 'ipv4';
+        }
+
+        function isOfficialSpeedQualified(value) {
+            const speed = parseSpeedMB(value);
+            return speed >= 0 && speed >= officialSpeedMinValue;
+        }
+
+        function getOfficialRowSpeed(row) {
+            if (row?.Speed || row?.speed) return row.Speed || row.speed;
+            const ip = row?.IP || row?.ip || '';
+            const test = testData.find((item) => item.IP === ip || item.ip === ip);
+            return test?.Speed || test?.speed || '';
+        }
+
+        function matchesOfficialQualifiedFilter(row, filter) {
+            filter = normalizeQualifiedFilter(filter);
+            if (filter === 'all') return true;
+            const qualified = isOfficialSpeedQualified(getOfficialRowSpeed(row));
+            return filter === 'qualified' ? qualified : !qualified;
+        }
+
+        function getFilteredOfficialScanData() {
+            return scanData;
         }
 
         function escapeJSString(v) {
@@ -2179,6 +2294,7 @@
         }
 
         function renderAllNSBLiveRows() {
+            nsbLiveRenderTimer = null;
             const tbody = document.querySelector('#scanTable tbody');
             tbody.innerHTML = '';
             sortNSBLiveRowsByLatency();
@@ -2192,6 +2308,11 @@
             updateBadge('scanCount', rows.length);
         }
 
+        function scheduleNSBLiveRender() {
+            if (nsbLiveRenderTimer) return;
+            nsbLiveRenderTimer = window.setTimeout(renderAllNSBLiveRows, 250);
+        }
+
         function addNSBLiveResult(row, render = true) {
             const key = (row.ip || '') + ':' + (row.port || '');
             const existingIdx = nsbLiveIndex[key];
@@ -2199,17 +2320,17 @@
             if (existingIdx !== undefined) {
                 Object.assign(nsbLiveRows[existingIdx], row);
                 if (!render) return;
-                renderAllNSBLiveRows();
+                scheduleNSBLiveRender();
                 return;
             }
 
+            nsbLiveIndex[key] = nsbLiveRows.length;
             nsbLiveRows.push(row);
-            sortNSBLiveRowsByLatency();
             updateBadge('scanCount', nsbLiveRows.filter((item) => matchesIPTypeFilter(item.ipType, nsbTableIPTypeFilter) && matchesQualifiedFilter(item, nsbTableQualifiedFilter)).length);
             if (!render) return;
             if (!matchesIPTypeFilter(row.ipType, nsbTableIPTypeFilter)) return;
             if (!matchesQualifiedFilter(row, nsbTableQualifiedFilter)) return;
-            renderAllNSBLiveRows();
+            scheduleNSBLiveRender();
         }
 
         function sortNSBLiveRowsByLatency() {
@@ -2280,8 +2401,8 @@
 
         function addScanResult(row, render = true) {
             scanResultsCount++;
-            updateBadge('scanCount', scanResultsCount);
             scanData.push(row);
+            updateBadge('scanCount', getFilteredOfficialScanData().length);
             if (render) renderScanRowOfficial(row);
         }
 
@@ -2289,7 +2410,9 @@
             scanData.sort((a, b) => parseFloat(a.LatencyStr) - parseFloat(b.LatencyStr));
             const tbody = document.querySelector('#scanTable tbody');
             tbody.innerHTML = '';
-            scanData.forEach(renderScanRowOfficial);
+            const rows = getFilteredOfficialScanData();
+            rows.forEach(renderScanRowOfficial);
+            updateBadge('scanCount', rows.length);
         }
 
         function compareOfficialResultObjects(a, b) {
@@ -2348,6 +2471,8 @@
             runningTaskMode = 'official';
             runningTaskTab = 'test';
             setStartLoading(getRunningButtonText());
+            resetProgress();
+            progressBox.style.display = 'block';
             showDCSelection(dcList);
             if (!wsSend({ type: 'start_test', data: { dc, port, delay } })) {
                 finishRunningTask('✨ 重新开始扫描');
@@ -2363,24 +2488,37 @@
             const speedText = res.Speed || '未测速';
             const speedColor = speedText.includes('MB/s') ? (parseFloat(speedText) > SPEED_GREEN ? '#10b981' : '#f59e0b') : (speedText === '未测速' ? '' : '#ef4444');
             const isTesting = currentSpeedTestingIP === res.IP;
+            const speedDisabled = isTesting || isTaskRunning || officialBatchSpeedRunning;
             const buttonText = isTesting ? '测速中' : (res.Speed ? '重新测速' : '测速');
-            const row = `<tr><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};">${speedText}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${isTesting ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
+            const row = `<tr><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};">${speedText}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
             document.querySelector('#testTable tbody').insertAdjacentHTML('beforeend', row);
         }
 
         function addTestResult(res, render = true) {
             testResultsCount++;
-            updateBadge('testCount', testResultsCount);
             testData.push(res);
-            if (render) renderTestRow(res);
+            updateBadge('testCount', getFilteredOfficialTestData().length);
+            if (render && matchesOfficialQualifiedFilter(res, officialTestQualifiedFilter)) renderTestRow(res);
+            updateBatchSpeedButton();
+        }
+
+        function getFilteredOfficialTestData() {
+            return testData.filter((row) => matchesOfficialQualifiedFilter(row, officialTestQualifiedFilter));
+        }
+
+        function setOfficialTestQualifiedFilter(value) {
+            officialTestQualifiedFilter = normalizeQualifiedFilter(value);
+            if (currentMode === 'official') renderAllTestResults();
         }
 
         function renderAllTestResults() {
             const tbody = document.querySelector('#testTable tbody');
             tbody.innerHTML = '';
-            testResultsCount = testData.length;
+            const rows = getFilteredOfficialTestData();
+            testResultsCount = rows.length;
             updateBadge('testCount', testResultsCount);
-            testData.forEach(renderTestRow);
+            rows.forEach(renderTestRow);
+            updateBatchSpeedButton();
         }
 
         function onTestComplete() {
@@ -2392,6 +2530,10 @@
         }
 
         function runSpeedTest(ip) {
+            if (isTaskRunning || officialBatchSpeedRunning) {
+                log('当前已有任务运行，单个测速已忽略');
+                return;
+            }
             if (currentSpeedTestingIP && currentSpeedTestingIP !== ip) {
                 log(`已有测速任务进行中: ${currentSpeedTestingIP}`);
                 return;
@@ -2429,6 +2571,7 @@
             const val = document.getElementById(`speed-val-${data.ip.replace(/[:.]/g, '_')}`);
             const item = testData.find((r) => r.IP === data.ip);
             if (item) item.Speed = data.speed;
+            officialSpeedEnabledForResults = testData.some((r) => isOfficialSpeedQualified(r.Speed));
             if (currentSpeedTestingIP === data.ip) {
                 currentSpeedTestingIP = '';
             }
@@ -2440,6 +2583,55 @@
                 btn.textContent = '重新测速';
                 btn.disabled = false;
             }
+            updateBatchSpeedButton();
+        }
+
+        function getOfficialSpeedConfig() {
+            const port = parseInt(document.getElementById('testPort')?.value || '443', 10) || 443;
+            const url = document.getElementById('speedTestUrl')?.value.trim() || defaultSpeedTestUrl;
+            const speedMin = parseFloat(document.getElementById('officialSpeedMin')?.value || '0.1') || 0.1;
+            const speedLimit = parseInt(document.getElementById('officialSpeedLimit')?.value || '0', 10) || 0;
+            return { port, url, speedMin, speedLimit, results: testData };
+        }
+
+        function updateBatchSpeedButton() {
+            const btn = document.getElementById('btnBatchSpeed');
+            if (!btn) return;
+            btn.disabled = officialBatchSpeedRunning || isTaskRunning || !testData.length || currentMode !== 'official';
+            btn.textContent = officialBatchSpeedRunning ? '测速中...' : '🚀 一键测速';
+        }
+
+        function startOfficialBatchSpeed(auto = false) {
+            if (officialBatchSpeedRunning) return false;
+            if (!testData.length) {
+                if (!auto) alert('请先完成数据中心详细测试');
+                return false;
+            }
+            const cfg = getOfficialSpeedConfig();
+            if (cfg.speedLimit <= 0) {
+                if (!auto) alert('测速结果上限必须大于 0');
+                else log('官方自动测速已跳过：测速结果上限为 0');
+                return false;
+            }
+            officialSpeedMinValue = cfg.speedMin;
+            officialBatchSpeedRunning = true;
+            isTaskRunning = true;
+            isStoppingTask = false;
+            runningTaskLabel = '官方一键测速';
+            runningTaskMode = 'official';
+            runningTaskTab = 'test';
+            setStartLoading(getRunningButtonText());
+            resetProgress();
+            progressBox.style.display = 'block';
+            updateBatchSpeedButton();
+            if (!wsSend({ type: 'start_official_speed_batch', data: cfg })) {
+                officialBatchSpeedRunning = false;
+                finishRunningTask('✨ 开始扫描与测试');
+                updateBatchSpeedButton();
+                alert('连接未就绪，请等待重连后再试');
+                return false;
+            }
+            return true;
         }
 
         function resetCurrentSpeedButton() {
@@ -2458,6 +2650,7 @@
                 val.style.color = fallbackSpeed.includes('MB/s') ? (parseFloat(fallbackSpeed) > 10 ? '#10b981' : '#f59e0b') : '';
             }
             currentSpeedTestingIP = '';
+            updateBatchSpeedButton();
         }
 
         // 修改点3：增强 copyToClipboard 函数（解决复制不生效 + 第一次可用后面失效的问题）
@@ -2519,12 +2712,13 @@
         }
 
         function startTask() {
-            if (isTaskRunning) {
+            if (isTaskRunning || officialBatchSpeedRunning) {
                 if (confirm(getStopConfirmText())) {
                     if (!wsSend({ type: 'stop_task', data: {} })) {
                         alert('连接未就绪，无法发送停止命令');
                         return;
                     }
+                    isStoppingTask = true;
                     setStartLoading('正在停止...');
                 }
                 return;
@@ -2542,6 +2736,14 @@
             const threads = parseInt(document.getElementById('scanThreads').value) || 100;
             const port = parseInt(document.getElementById('testPort').value) || 443;
             const delay = parseInt(document.getElementById('testDelay').value) || 0;
+            const officialSpeedConfig = getOfficialSpeedConfig();
+            const autoSpeed = String(document.getElementById('officialAutoSpeed')?.value || 'off').toLowerCase() === 'on';
+            officialSpeedMinValue = officialSpeedConfig.speedMin;
+            officialSpeedEnabledForResults = autoSpeed && officialSpeedConfig.speedLimit > 0;
+            officialAutoSpeedPending = autoSpeed;
+            officialAutoStage = autoSpeed ? 'scan' : '';
+            officialBatchSpeedRunning = false;
+            isStoppingTask = false;
 
             isTaskRunning = true;
             runningTaskLabel = '官方优选扫描';
@@ -2570,11 +2772,28 @@
             updateBadge('dcCount', 0);
 
             if (!wsSend({ type: 'start_task', data: { ipType, threads, port, delay } })) {
+                officialAutoSpeedPending = false;
+                officialAutoStage = '';
                 finishRunningTask('✨ 开始扫描与测试');
                 alert('连接未就绪，请等待重连后再试');
                 return;
             }
             switchTab('scan');
+        }
+
+        function maybeStartOfficialAutoTest() {
+            if (!officialAutoSpeedPending || officialAutoStage !== 'scan') return false;
+            const targetDC = document.getElementById('officialTargetDC')?.value.trim().toUpperCase() || '';
+            const selected = targetDC ? dcList.find((dc) => String(dc.DataCenter || '').toUpperCase() === targetDC) : dcList[0];
+            if (!selected) {
+                log(targetDC ? `官方自动测速未找到数据中心: ${targetDC}` : '官方自动测速没有可用数据中心');
+                officialAutoSpeedPending = false;
+                officialAutoStage = '';
+                return false;
+            }
+            officialAutoStage = 'test';
+            selectDC(selected.DataCenter);
+            return true;
         }
 
         function startNSBTask() {
@@ -2614,6 +2833,7 @@
             }
 
             isTaskRunning = true;
+            isStoppingTask = false;
             runningTaskLabel = '非标优选';
             runningTaskMode = 'nsb';
             runningTaskTab = 'scan';
@@ -2629,6 +2849,10 @@
             nsbRows = [];
             nsbLiveRows = [];
             nsbLiveIndex = {};
+            if (nsbLiveRenderTimer) {
+                clearTimeout(nsbLiveRenderTimer);
+                nsbLiveRenderTimer = null;
+            }
             updateBadge('scanCount', 0);
             autoUploadKeys = new Set();
 
@@ -2692,7 +2916,7 @@
 
         function openResultModal(mode) {
             resultModalMode = mode;
-            const rows = getCurrentResultRows(resultModalMode);
+            const rows = currentMode === 'nsb' ? getNSBResultObjects() : (mode === 'test' ? testData.map(testResultToObject) : scanData.map(scanResultToObject));
             if (!rows.length) return alert('暂无可操作结果');
             document.getElementById('resultModalTitle').textContent = '结果操作';
             document.getElementById('resultFormat').value = 'csv';
@@ -2702,9 +2926,10 @@
             const filterSelect = document.getElementById('resultIPTypeFilter');
             if (filterSelect) filterSelect.value = 'all';
             const qualifiedField = document.getElementById('resultQualifiedFilterField');
-            if (qualifiedField) qualifiedField.style.display = currentMode === 'nsb' ? '' : 'none';
+            if (qualifiedField) qualifiedField.style.display = '';
             const qualifiedSelect = document.getElementById('resultQualifiedFilter');
-            if (qualifiedSelect) qualifiedSelect.value = currentMode === 'nsb' && nsbSpeedEnabledForResults ? 'qualified' : 'all';
+            const hasQualified = currentMode === 'nsb' ? nsbSpeedEnabledForResults : officialSpeedEnabledForResults;
+            if (qualifiedSelect) qualifiedSelect.value = hasQualified ? 'qualified' : 'all';
             resultCustomFields = [];
             const customInput = document.getElementById('resultCustomFields');
             if (customInput) customInput.value = '';
@@ -2972,14 +3197,15 @@
                 if (!key) key = label.toLowerCase();
                 const baseKey = key;
                 const used = seen.get(baseKey) || 0;
-                if (used > 0) {
-                    let count = used;
-                    do {
-                        key = `${baseKey}${count}`;
-                        count++;
-                    } while (seen.has(key));
-                }
-                seen.set(baseKey, used + 1);
+            if (used > 0) {
+                let count = used;
+                do {
+                    key = `${baseKey}${count}`;
+                    count++;
+                } while (seen.has(key));
+            }
+            key = key.replace(/[\s,:#]/g, '_');
+            seen.set(baseKey, used + 1);
                 if (key !== baseKey) seen.set(key, (seen.get(key) || 0) + 1);
                 return { key, label, value };
             }).filter(Boolean);
@@ -3058,10 +3284,12 @@
 
         function getCurrentExportRows(mode) {
             const rows = getCurrentResultRows(mode);
-            if (currentMode !== 'nsb') return rows;
             const filter = document.getElementById('resultIPTypeFilter')?.value || 'all';
-            const qualified = document.getElementById('resultQualifiedFilter')?.value || (nsbSpeedEnabledForResults ? 'qualified' : 'all');
-            return rows.filter((row) => matchesIPTypeFilter(row.ipType, filter) && matchesQualifiedFilter(row, qualified));
+            const qualified = document.getElementById('resultQualifiedFilter')?.value || 'all';
+            if (currentMode === 'nsb') {
+                return rows.filter((row) => matchesIPTypeFilter(row.ipType, filter) && matchesQualifiedFilter(row, qualified));
+            }
+            return rows.filter((row) => matchesIPTypeFilter(getOfficialIPType(row), filter) && matchesOfficialQualifiedFilter(row, qualified));
         }
 
         function scanResultToObject(r) {
@@ -3271,6 +3499,8 @@
             let rows = getCurrentResultRows(mode);
             if (currentMode === 'nsb' && nsbSpeedEnabledForResults) {
                 rows = rows.filter((row) => matchesQualifiedFilter(row, 'qualified'));
+            } else if (currentMode === 'official' && officialSpeedEnabledForResults) {
+                rows = rows.filter((row) => matchesOfficialQualifiedFilter(row, 'qualified'));
             }
             if (!rows.length) {
                 log('自动上传跳过: 没有合格结果');
@@ -3312,6 +3542,8 @@
             switch (msg.type) {
                 case 'init_config':
                     defaultSpeedTestUrl = msg.data.speedTestURL || defaultSpeedTestUrl;
+                    webDebugMode = !!msg.data.debug;
+                    if (webDebugMode) log('调试模式已开启，错误将输出到程序 log');
                     document.getElementById('speedTestUrl').value = defaultSpeedTestUrl;
                     document.getElementById('nsbSpeedUrl').value = defaultSpeedTestUrl;
                     renderVersionInfo(msg.data || {});
@@ -3320,9 +3552,11 @@
                     renderVersionInfo(msg.data || {});
                     break;
                 case 'scan_progress':
+                    if (isStoppingTask) break;
                     updateProgress(msg.data.current || 0, msg.data.total || 0, '扫描中');
                     break;
                 case 'scan_result':
+                    if (isStoppingTask) break;
                     addScanResult(msg.data, currentMode === 'official' && runningTaskMode !== 'nsb');
                     break;
                 case 'scan_complete_wait_dc':
@@ -3331,28 +3565,60 @@
                         sortAndRenderScanResults();
                         showDCSelection(msg.data);
                         updateProgress(msg.data.length ? 100 : 0, 100, '扫描完成，选择数据中心');
+                        if (officialAutoSpeedPending && officialAutoStage === 'scan') {
+                            window.setTimeout(maybeStartOfficialAutoTest, 200);
+                        }
                     }
                     break;
                 case 'test_progress':
+                    if (isStoppingTask) break;
                     if (currentMode === 'official') {
                         updateProgress(msg.data.current || 0, msg.data.total || 0, '测试中');
                     }
                     break;
                 case 'test_result':
+                    if (isStoppingTask) break;
                     addTestResult(msg.data, currentMode === 'official' && document.getElementById('test').classList.contains('active'));
                     break;
                 case 'test_complete':
+                    if (isStoppingTask) break;
                     if (currentMode === 'official') {
                         testData = msg.data;
                         renderAllTestResults();
                         onTestComplete();
                         finishRunningTask('✨ 开始扫描与测试');
                         updateProgress(msg.data.length, msg.data.length, '测试完成');
-                        autoUploadOfficialResults();
+                        if (officialAutoSpeedPending && officialAutoStage === 'test') {
+                            officialAutoStage = 'speed';
+                            if (!startOfficialBatchSpeed(true)) autoUploadOfficialResults();
+                        } else {
+                            autoUploadOfficialResults();
+                        }
                     }
                     break;
                 case 'speed_test_result':
+                    if (isStoppingTask) break;
                     updateSpeedResult(msg.data);
+                    break;
+                case 'official_speed_progress':
+                    if (isStoppingTask) break;
+                    {
+                        const p = msg.data || {};
+                        updateProgress(p.current || 0, p.total || 1, `测速中，达标 ${p.qualified || 0}/${p.limit || 0}`);
+                    }
+                    break;
+                case 'official_speed_complete':
+                    if (isStoppingTask) break;
+                    officialAutoSpeedPending = false;
+                    officialAutoStage = '';
+                    officialBatchSpeedRunning = false;
+                    officialSpeedEnabledForResults = testData.some((r) => isOfficialSpeedQualified(r.Speed));
+                    finishRunningTask('✨ 开始扫描与测试');
+                    updateBatchSpeedButton();
+                    renderAllTestResults();
+                    sortAndRenderScanResults();
+                    updateProgress(100, 100, '测速完成');
+                    autoUploadOfficialResults();
                     break;
                 case 'github_upload_result':
                     if (!msg.data.silent) {
@@ -3368,6 +3634,7 @@
                     break;
 
                 case 'github_upload_error':
+                    recordWebDebugError('github_upload_error', msg.data?.message || msg.data || 'GitHub 上传失败');
                     if (msg.data.silent) {
                         alert(msg.data.message || 'GitHub 自动上传失败');
                     } else {
@@ -3377,6 +3644,7 @@
                     break;
 
                 case 'nsb_progress':
+                    if (isStoppingTask) break;
                     if (currentMode === 'nsb') {
                         const p = msg.data || {};
                         const percent = parseFloat(p.percent || 0);
@@ -3386,14 +3654,21 @@
                     }
                     break;
                 case 'nsb_scan_result':
+                    if (isStoppingTask) break;
                     addNSBLiveResult(msg.data || {}, currentMode === 'nsb');
                     break;
                 case 'nsb_csv_complete':
+                    if (isStoppingTask) break;
                     finishRunningTask('✨ 开始扫描与测试');
                     nsbHeaders = msg.data.headers || [];
                     nsbRows = msg.data.rows || [];
                     nsbLiveRows = [];
-                    nsbLiveIndex = {}; renderScanRowsCSV(nsbHeaders, nsbRows);
+                    nsbLiveIndex = {};
+                    if (nsbLiveRenderTimer) {
+                        clearTimeout(nsbLiveRenderTimer);
+                        nsbLiveRenderTimer = null;
+                    }
+                    renderScanRowsCSV(nsbHeaders, nsbRows);
                     const nsbStatus = msg.data.status || 'complete';
                     const nsbMessage = msg.data.message || '测试完成';
                     updateProgress(nsbRows.length, Math.max(nsbRows.length, 1), nsbStatus === 'failed' ? '任务失败' : '完成');
@@ -3415,7 +3690,12 @@
                     break;
 
                 case 'task_stopped':
+                    isStoppingTask = false;
+                    officialAutoSpeedPending = false;
+                    officialAutoStage = '';
+                    officialBatchSpeedRunning = false;
                     finishRunningTask('✨ 开始扫描与测试');
+                    updateBatchSpeedButton();
                     finishCompactIPv4();
                     progressBar.style.background = 'var(--warning-color)';
                     progressBar.style.width = '100%';
@@ -3425,13 +3705,25 @@
                     break;
 
                 case 'error':
+                    recordWebDebugError('server_error', msg.data);
+                    isStoppingTask = false;
+                    if (String(msg.data || '').includes('已有任务正在运行')) {
+                        resetCurrentSpeedButton();
+                        updateBatchSpeedButton();
+                        log('错误: ' + msg.data);
+                        break;
+                    }
                     if (String(msg.data || '').includes('上传 GitHub')) {
                         setGitHubUploadStatus(String(msg.data), 'error');
                     }
+                    officialAutoSpeedPending = false;
+                    officialAutoStage = '';
+                    officialBatchSpeedRunning = false;
                     if (currentSpeedTestingIP) {
                         resetCurrentSpeedButton();
                     }
                     finishRunningTask('✨ 开始扫描与测试');
+                    updateBatchSpeedButton();
                     finishCompactIPv4();
                     progressBar.style.background = 'var(--error-color)';
                     progressBar.style.width = '100%';
@@ -3449,6 +3741,7 @@
                     handleResetConfigResult(msg.data);
                     break;
                 case 'compact_ipv4_progress':
+                    if (isStoppingTask) break;
                     {
                         const p = msg.data || {};
                         const percent = parseFloat(p.percent || 0);
@@ -3457,6 +3750,7 @@
                     }
                     break;
                 case 'compact_ipv4_hit':
+                    if (isStoppingTask) break;
                     if (msg.data && msg.data.ip) {
                         compactHitBuffer.push(msg.data.ip);
                         if (!compactHitFlushTimer) {
@@ -3465,6 +3759,7 @@
                     }
                     break;
                 case 'compact_ipv4_done':
+                    if (isStoppingTask) break;
                     flushCompactHits();
                     finishRunningTask('✨ 开始扫描与测试');
                     finishCompactIPv4('✅');
@@ -3479,8 +3774,17 @@
                     log(msg.data);
                     break;
                 case 'task_complete':
+                    if (isStoppingTask) break;
+                    if (officialBatchSpeedRunning || (officialAutoSpeedPending && officialAutoStage === 'speed')) {
+                        updateBatchSpeedButton();
+                        break;
+                    }
                     finishRunningTask('✨ 开始扫描与测试');
+                    updateBatchSpeedButton();
                     updateProgress(100, 100, '完成');
+                    if (currentMode === 'official' && officialAutoSpeedPending && officialAutoStage === 'scan') {
+                        window.setTimeout(maybeStartOfficialAutoTest, 100);
+                    }
                     break;
             }
         }

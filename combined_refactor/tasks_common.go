@@ -29,7 +29,6 @@ func runBoundedWorkers(ctx context.Context, total, maxWorkers, progressEvery int
 		select {
 		case <-ctx.Done():
 			wasCanceled = true
-			wg.Wait()
 			return wasCanceled
 		case slots <- struct{}{}:
 		}

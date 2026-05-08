@@ -151,7 +151,7 @@ CLI 用法: ./combined_refactor_debug -cli -mode=official ...
   说明: Web/CLI 全局自定义 DNS 服务器，例如 1.1.1.1、8.8.8.8:53 或 2606:4700:4700::1111；留空使用系统 DNS。启用后，IP 库、locations、ASN、GitHub、网络 URL 输入等外部请求的 DNS 解析会走内置 resolver
   默认: <系统 DNS>
 -debug
-  说明: 是否开启调试输出
+  说明: 调试输出等级：false 关闭；error 记录程序错误和下载/更新/API 异常；all 额外包含测速失败等全部明细；-debug 或 -debug=true 等同 error。日志写入程序同目录 cfdata-debug.log，超过 50MB 时保留最近 25MB
   默认: false
 -compactipv4
   说明: 精简本地 IPv4 地址库：按 /24 子网测 TCP:80 连通性并覆盖 ips-v4.txt
@@ -190,7 +190,7 @@ CLI 用法: ./combined_refactor_debug -cli -mode=official ...
   说明: 快速上传指定文件到 GitHub，不执行测试；需配合 -github
   默认: <空>
 
-CLI 配置优先级：命令行参数 > 配置文件 > 环境变量 > 默认值。默认配置文件 `cfdata-config.json` 会在二进制所在目录首次运行 `-cli` 时自动生成；首次生成后程序会提示退出，建议编辑完整配置后重新开始测试。配置文件会列出全部配置项，并为每项提供中文说明、默认值和可选输入项；同时列出 `format`/`fields` 可输入值与全部可选输出字段。TXT 默认输出为 `ip:port#数据中心-源IP位置`。
+CLI 配置优先级：命令行参数 > 配置文件 > 环境变量 > 默认值。默认配置文件 `cfdata-config.json` 会在二进制所在目录首次运行 `-cli` 时自动生成；首次生成后程序会提示退出，建议编辑完整配置后重新开始测试。配置文件带 `_config_version`，值使用当前程序版本号；程序升级后会继承原有 `config` 内容并补齐新增配置；遇到不兼容旧值会迁移为安全默认值，例如旧版 `debug:true` 会迁移为 `debug:"error"`。配置文件会列出全部配置项，并为每项提供中文说明、默认值和可选输入项；同时列出 `format`/`fields` 可输入值与全部可选输出字段。TXT 默认输出为 `ip:port#数据中心-源IP位置`。
 
 Web 上传 GitHub 成功后会在结果操作弹窗显示 Raw 地址，点击 Raw 地址即可复制。
 ----------------------------------------
