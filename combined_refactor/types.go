@@ -75,93 +75,93 @@ type TestResult struct {
 }
 
 type iptestResult struct {
-	ipAddr        string
-	port          int
-	dataCenter    string
-	locCode       string
-	region        string
-	city          string
-	latency       string
-	tcpDuration   time.Duration
-	outboundIP    string
-	ipType        string
-	asnNumber     string
-	asnOrg        string
-	visitScheme   string
-	tlsVersion    string
-	sni           string
-	httpVersion   string
-	warp          string
-	gateway       string
-	rbi           string
-	kex           string
-	timestamp     string
-	downloadSpeed float64
-	speedText     string
-	speedTested   bool
+	ipAddr         string
+	port           int
+	dataCenter     string
+	locCode        string
+	region         string
+	city           string
+	latency        string
+	tcpDuration    time.Duration
+	outboundIP     string
+	ipType         string
+	asnNumber      string
+	asnOrg         string
+	visitScheme    string
+	tlsVersion     string
+	sni            string
+	httpVersion    string
+	warp           string
+	gateway        string
+	rbi            string
+	kex            string
+	timestamp      string
+	downloadSpeed  float64
+	speedText      string
+	speedTested    bool
 	speedQualified bool
 }
 
 type nsbScanMessage struct {
-	IP          string `json:"ip"`
-	Port        string `json:"port"`
-	TLS         string `json:"tls"`
-	DC          string `json:"dc"`
-	Loc         string `json:"loc"`
-	Region      string `json:"region"`
-	City        string `json:"city"`
-	Latency     string `json:"latency"`
-	Speed       string `json:"speed"`
-	SpeedQualified bool `json:"speedQualified"`
-	OutboundIP  string `json:"outboundIP"`
-	IPType      string `json:"ipType"`
-	ASNNumber   string `json:"asnNumber"`
-	ASNOrg      string `json:"asnOrg"`
-	VisitScheme string `json:"visitScheme"`
-	TLSVersion  string `json:"tlsVersion"`
-	SNI         string `json:"sni"`
-	HTTPVersion string `json:"httpVersion"`
-	Warp        string `json:"warp"`
-	Gateway     string `json:"gateway"`
-	RBI         string `json:"rbi"`
-	Kex         string `json:"kex"`
-	Timestamp   string `json:"timestamp"`
+	IP             string `json:"ip"`
+	Port           string `json:"port"`
+	TLS            string `json:"tls"`
+	DC             string `json:"dc"`
+	Loc            string `json:"loc"`
+	Region         string `json:"region"`
+	City           string `json:"city"`
+	Latency        string `json:"latency"`
+	Speed          string `json:"speed"`
+	SpeedQualified bool   `json:"speedQualified"`
+	OutboundIP     string `json:"outboundIP"`
+	IPType         string `json:"ipType"`
+	ASNNumber      string `json:"asnNumber"`
+	ASNOrg         string `json:"asnOrg"`
+	VisitScheme    string `json:"visitScheme"`
+	TLSVersion     string `json:"tlsVersion"`
+	SNI            string `json:"sni"`
+	HTTPVersion    string `json:"httpVersion"`
+	Warp           string `json:"warp"`
+	Gateway        string `json:"gateway"`
+	RBI            string `json:"rbi"`
+	Kex            string `json:"kex"`
+	Timestamp      string `json:"timestamp"`
 }
 
 type nsbCSVCompletePayload struct {
-	Headers []string   `json:"headers"`
-	Rows    [][]string `json:"rows"`
-	File    string     `json:"file"`
-	Status  string     `json:"status"`
-	Message string     `json:"message"`
-	QualifiedCount int  `json:"qualifiedCount"`
+	Headers        []string   `json:"headers"`
+	Rows           [][]string `json:"rows"`
+	File           string     `json:"file"`
+	Status         string     `json:"status"`
+	Message        string     `json:"message"`
+	QualifiedCount int        `json:"qualifiedCount"`
 }
 
 func (r *iptestResult) toNSBMessage(speedStr string) nsbScanMessage {
 	return nsbScanMessage{
-		IP:          r.ipAddr,
-		Port:        strconv.Itoa(r.port),
-		TLS:         strconv.FormatBool(r.visitScheme == "https"),
-		DC:          r.dataCenter,
-		Loc:         r.locCode,
-		Region:      r.region,
-		City:        r.city,
-		Latency:     r.latency,
-		Speed:       speedStr,
+		IP:             r.ipAddr,
+		Port:           strconv.Itoa(r.port),
+		TLS:            strconv.FormatBool(r.visitScheme == "https"),
+		DC:             r.dataCenter,
+		Loc:            r.locCode,
+		Region:         r.region,
+		City:           r.city,
+		Latency:        r.latency,
+		Speed:          speedStr,
 		SpeedQualified: r.speedQualified,
-		OutboundIP:  r.outboundIP,
-		IPType:      r.ipType,
-		ASNNumber:   r.asnNumber,
-		ASNOrg:      r.asnOrg,
-		VisitScheme: r.visitScheme,
-		TLSVersion:  r.tlsVersion,
-		SNI:         r.sni,
-		HTTPVersion: r.httpVersion,
-		Warp:        r.warp,
-		Gateway:     r.gateway,
-		RBI:         r.rbi,
-		Kex:         r.kex,
-		Timestamp:   r.timestamp,
+		OutboundIP:     r.outboundIP,
+		IPType:         r.ipType,
+		ASNNumber:      r.asnNumber,
+		ASNOrg:         r.asnOrg,
+		VisitScheme:    r.visitScheme,
+		TLSVersion:     r.tlsVersion,
+		SNI:            r.sni,
+		HTTPVersion:    r.httpVersion,
+		Warp:           r.warp,
+		Gateway:        r.gateway,
+		RBI:            r.rbi,
+		Kex:            r.kex,
+		Timestamp:      r.timestamp,
 	}
 }
 
@@ -213,4 +213,5 @@ var (
 	speedTestURL     string
 	speedTestWorkers = 5
 	debugMode        bool
+	debugLevel       = "error"
 )

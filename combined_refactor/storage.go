@@ -19,7 +19,7 @@ func configureHTTPClients() {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = dialContext
 	transport.TLSClientConfig = tlsConfigWithRootCAs("")
-	upstreamHTTPClient.Transport = transport
+	upstreamHTTPClient.Transport = wrapDebugTransport("upstream", transport)
 }
 
 func initLocations() {
@@ -65,6 +65,7 @@ func initLocations() {
 }
 
 func sendLog(msg string) {
+	recordDebugNotice("terminal_log", msg)
 	fmt.Println(msg)
 }
 

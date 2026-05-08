@@ -13,12 +13,12 @@ import (
 )
 
 const (
-	compactIPv4File            = "ips-v4.txt"
-	compactIPv4API             = "https://www.baipiao.eu.org/cloudflare/ips-v4"
-	compactIPv4Threads         = 100
-	compactIPv4MaxEmptyRounds  = 2
-	compactIPv4ConnectTimeout  = time.Second
-	compactIPv4Port            = 80
+	compactIPv4File           = "ips-v4.txt"
+	compactIPv4API            = "https://www.baipiao.eu.org/cloudflare/ips-v4"
+	compactIPv4Threads        = 100
+	compactIPv4MaxEmptyRounds = 2
+	compactIPv4ConnectTimeout = time.Second
+	compactIPv4Port           = 80
 )
 
 type compactSubnetState struct {

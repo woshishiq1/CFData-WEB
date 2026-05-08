@@ -16,7 +16,7 @@ import (
 
 var webUser, webPassword string
 var webSessionMinutes int
-var boolFlagNames = []string{"cli", "tls", "progress", "debug", "nocolor", "compactipv4", "compact", "github", "nsbqualified"}
+var boolFlagNames = []string{"cli", "tls", "progress", "nocolor", "compactipv4", "compact", "github", "nsbqualified"}
 
 type latestReleaseInfo struct {
 	TagName string `json:"tag_name"`
@@ -79,6 +79,7 @@ func checkAndPrintUpdate(prefix string) {
 	defer cancel()
 	info, err := getLatestRelease(ctx)
 	if err != nil {
+		recordDebugError("update_check", err.Error())
 		fmt.Printf("%s更新检测失败: %v\n", prefix, err)
 		return
 	}
@@ -147,7 +148,7 @@ func main() {
 	flag.IntVar(&listenPort, "port", 13335, "服务监听端口")
 	flag.StringVar(&speedTestURL, "url", "speed.cloudflare.com/__down?bytes=99999999", "测速下载地址（不含协议前缀）")
 	flag.StringVar(&customDNSServer, "dns", defaultDNSServers, "自定义 DNS 服务器，例如 223.5.5.5、8.8.8.8:53 或逗号分隔多个；默认系统 DNS 优先、失败回退到该内置 DNS，显式提供时强制使用指定 DNS")
-	flag.BoolVar(&debugMode, "debug", false, "开启调试输出（导出失败明细 CSV）")
+	flag.Var(debugFlagValue{}, "debug", "开启调试输出等级：error、all；也兼容 true/false，-debug 默认为 error")
 	flag.StringVar(&webUser, "user", "", "Web 认证用户名（不设置则不启用认证）")
 	flag.StringVar(&webPassword, "password", "", "Web 认证密码（需同时设置 -user）")
 	flag.IntVar(&webSessionMinutes, "session", 720, "Web 登录会话有效期（分钟）")
@@ -162,6 +163,7 @@ func main() {
 			if errors.Is(err, errCLIConfigCreated) {
 				return
 			}
+			recordProgramDebugError("cli_prepare", err.Error())
 			fmt.Printf("CLI 执行失败: %v\n", err)
 			return
 		}
@@ -176,6 +178,7 @@ func main() {
 	initLocations()
 	if cliCfg.enabled {
 		if err := runCLI(cliCfg); err != nil {
+			recordProgramDebugError("cli_run", err.Error())
 			fmt.Printf("CLI 执行失败: %v\n", err)
 		}
 		return
@@ -218,6 +221,10 @@ func main() {
 		fmt.Printf("当前 DNS: %s\n", customDNSServer)
 	}
 	fmt.Printf("调试模式: %v\n", debugMode)
+	if debugMode {
+		fmt.Printf("调试等级: %s\n", normalizeDebugLevel(debugLevel))
+		fmt.Printf("调试日志: %s\n", defaultDebugLogPath())
+	}
 	server := &http.Server{
 		Addr:              addr,
 		ReadHeaderTimeout: 10 * time.Second,

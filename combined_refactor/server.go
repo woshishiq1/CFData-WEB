@@ -68,6 +68,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	session.sendWSMessage("init_config", map[string]interface{}{
 		"speedTestURL":     speedTestURL,
 		"speedTestWorkers": speedTestWorkers,
+		"debug":            debugMode,
 		"version":          appVersion,
 		"releaseURL":       releaseLatestURL,
 	})
@@ -76,6 +77,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		info, err := getLatestRelease(ctx)
 		if err != nil {
+			recordDebugError("version_check", err.Error())
 			session.sendWSMessage("version_info", map[string]interface{}{"version": appVersion, "releaseURL": releaseLatestURL, "error": err.Error()})
 			return
 		}
@@ -86,6 +88,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Printf("handler %s panic: %v\n%s\n", name, r, debug.Stack())
+				recordProgramDebugError("handler_panic", fmt.Sprintf("%s: %v\n%s", name, r, debug.Stack()))
 				session.sendWSMessage("error", fmt.Sprintf("内部错误（%s），请重试；若持续发生请查看后端日志", name))
 				session.cancelTaskSilently()
 			}
@@ -140,6 +143,28 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 			session.startTask(func(ctx context.Context, session *appSession) {
 				runSpeedTest(ctx, session, params.IP, params.Port, params.URL)
+			})
+		},
+		"start_official_speed_batch": func(data json.RawMessage) {
+			var params startOfficialSpeedBatchRequest
+			if err := json.Unmarshal(data, &params); err != nil {
+				session.sendWSMessage("error", "start_official_speed_batch 参数解析失败")
+				return
+			}
+			if params.Port <= 0 {
+				params.Port = 443
+			}
+			if params.SpeedLimit < 0 {
+				params.SpeedLimit = 0
+			}
+			if params.SpeedMin <= 0 {
+				params.SpeedMin = 0.1
+			}
+			if strings.TrimSpace(params.URL) == "" {
+				params.URL = speedTestURL
+			}
+			session.startTask(func(ctx context.Context, session *appSession) {
+				runOfficialSpeedBatch(ctx, session, params.Port, params.URL, params.SpeedLimit, params.SpeedMin, params.Results)
 			})
 		},
 		"start_nsb_task": func(data json.RawMessage) {
@@ -241,6 +266,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, msg, err := ws.ReadMessage()
 		if err != nil {
+			recordDebugNotice("websocket_read", err.Error())
 			break
 		}
 
@@ -272,6 +298,7 @@ func uploadGitHubContentWithRetry(ctx context.Context, params githubUploadReques
 			return downloadURL, nil
 		}
 		lastErr = err
+		recordDebugError("github_upload_attempt", fmt.Sprintf("attempt=%d/%d path=%s err=%v", attempt, githubUploadMaxAttempts, params.Path, err))
 		if onAttempt != nil {
 			onAttempt(attempt, githubUploadMaxAttempts, err)
 		}
