@@ -1,3 +1,4 @@
+// 原版源码，仅保留说明用途。来源: t.me/CF_NAT
 package main
 
 import (
