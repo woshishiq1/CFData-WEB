@@ -64,7 +64,7 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return 0, "测速失败"
+		return 0, formatSpeedHTTPFailure(resp.StatusCode)
 	}
 
 	buf := make([]byte, 32*1024)
@@ -154,6 +154,13 @@ loop:
 		return maxSpeedMB, ""
 	}
 	return realSpeedMB, ""
+}
+
+func formatSpeedHTTPFailure(statusCode int) string {
+	if statusCode == http.StatusTooManyRequests {
+		return "测速失败（速率限制）"
+	}
+	return "测速失败"
 }
 
 func runSpeedTest(ctx context.Context, session *appSession, ip string, port int, customURL string) {
@@ -249,8 +256,9 @@ func runOfficialSpeedBatch(ctx context.Context, session *appSession, port int, c
 		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": 0, "limit": speedLimit})
 		return
 	}
+	sortOfficialTestResults(results)
 
-	session.sendWSMessage("log", fmt.Sprintf("开始官方批量测速：%d 条记录，达标上限=%d，测速阈值=%.2fMB/s", len(results), speedLimit, speedMin))
+	session.sendWSMessage("log", fmt.Sprintf("开始测速：%d 条记录，目标上限=%d，测速阈值=%.2fMB/s", len(results), speedLimit, speedMin))
 	session.sendWSMessage("official_speed_progress", map[string]interface{}{"current": 0, "total": len(results), "qualified": 0, "limit": speedLimit})
 	updated, qualified := runOfficialSpeedTestsCore(ctx, results, port, speedLimit, speedMin, customURL, func(current, total, qualified int, result TestResult) {
 		session.sendWSMessage("speed_test_result", map[string]string{"ip": result.IP, "speed": result.Speed})

@@ -326,7 +326,7 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return 0, "测速失败"
+		return 0, formatSpeedHTTPFailure(resp.StatusCode)
 	}
 
 	buf := make([]byte, 32*1024)
@@ -437,9 +437,9 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	}
 
 	if resultLimit > 0 {
-		session.sendWSMessage("log", fmt.Sprintf("共读取 %d 条 ip 端口，开始延迟检测，结果上限=%d", len(ips), resultLimit))
+		session.sendWSMessage("log", fmt.Sprintf("开始扫描：%d 条记录，目标上限=%d", len(ips), resultLimit))
 	} else {
-		session.sendWSMessage("log", fmt.Sprintf("共读取 %d 条 ip 端口，开始延迟检测", len(ips)))
+		session.sendWSMessage("log", fmt.Sprintf("开始扫描：%d 条记录", len(ips)))
 	}
 
 	nsbResults := make([]iptestResult, 0, len(ips))
@@ -460,9 +460,9 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	if resultLimit > 0 && resultLimit < total {
 		total = resultLimit
 	}
-	reportNSBProgress(session, "scan", 0, total, "延迟扫描")
+	reportNSBProgress(session, "scan", 0, total, "扫描中")
 	wasCanceled := runNSBScanWorkers(ctx, len(ips), maxThreads, resultLimit, func(current int) {
-		reportNSBProgress(session, "scan", min(current, total), total, "延迟扫描")
+		reportNSBProgress(session, "scan", min(current, total), total, "扫描中")
 	}, func(idx int) int {
 		item := ips[idx]
 		select {
@@ -506,12 +506,11 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	completionMessage := "测试完成"
 	qualifiedCount := 0
 	if speedTest > 0 && speedLimit > 0 {
-		session.sendWSMessage("log", fmt.Sprintf("开始测速：%d 条记录，线程数=%d，测速目标上限=%d，测速阈值=%.2fMB/s", len(nsbResults), speedTest, speedLimit, speedMin))
+		session.sendWSMessage("log", fmt.Sprintf("开始测速：%d 条记录，线程数=%d，目标上限=%d，测速阈值=%.2fMB/s", len(nsbResults), speedTest, speedLimit, speedMin))
 
-		total := len(nsbResults)
-		reportNSBProgress(session, "speed", 0, total, "速度测试")
-		speedCanceled := runNSBSpeedWorkers(ctx, nsbResults, speedTest, speedLimit, speedMin, func(current int) {
-			reportNSBProgress(session, "speed", current, total, "速度测试")
+		reportNSBProgress(session, "speed", 0, speedLimit, "测速中")
+		speedCanceled := runNSBSpeedWorkers(ctx, nsbResults, speedTest, speedLimit, speedMin, func(tested, qualified int) {
+			reportNSBProgress(session, "speed", min(qualified, speedLimit), speedLimit, "测速中")
 		}, func(idx int, speedErr string) {
 			res := &nsbResults[idx]
 			session.sendWSMessage("nsb_scan_result", res.toNSBMessage(res.speedText))
@@ -574,7 +573,7 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	session.sendWSMessage("log", fmt.Sprintf("非标优选完成，结果文件: %s", outFile))
 }
 
-func runNSBSpeedWorkers(ctx context.Context, results []iptestResult, maxWorkers, targetQualified int, speedMin float64, onProgress func(current int), onResult func(idx int, speedErr string), work func(idx int) (float64, string)) bool {
+func runNSBSpeedWorkers(ctx context.Context, results []iptestResult, maxWorkers, targetQualified int, speedMin float64, onProgress func(tested, qualified int), onResult func(idx int, speedErr string), work func(idx int) (float64, string)) bool {
 	if len(results) == 0 {
 		return false
 	}
@@ -659,7 +658,7 @@ func runNSBSpeedWorkers(ctx context.Context, results []iptestResult, maxWorkers,
 				onResult(item.idx, item.err)
 			}
 			if onProgress != nil {
-				onProgress(completed)
+				onProgress(completed, qualified)
 			}
 		case jobCh <- next:
 			next++
