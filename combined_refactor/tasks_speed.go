@@ -184,7 +184,13 @@ func runSpeedTest(ctx context.Context, session *appSession, ip string, port int,
 	session.sendWSMessage("log", fmt.Sprintf("IP %s 测速完成: %s", ip, speedStr))
 }
 
-func runOfficialSpeedTestsCore(ctx context.Context, results []TestResult, port int, limit int, speedMinMB float64, customURL string, onResult func(current, total, qualified int, result TestResult)) ([]TestResult, []TestResult) {
+const speedRateLimitMessage = "检测到触发速率限制，请稍后重试或更换网络环境"
+
+func isSpeedRateLimited(speedErr string) bool {
+	return strings.Contains(speedErr, "速率限制")
+}
+
+func runOfficialSpeedTestsCore(ctx context.Context, results []TestResult, port int, limit int, speedMinMB float64, customURL string, onResult func(current, total, qualified int, result TestResult), onRateLimited func()) ([]TestResult, []TestResult) {
 	capacity := len(results)
 	if limit > 0 && limit < capacity {
 		capacity = limit
@@ -198,6 +204,7 @@ func runOfficialSpeedTestsCore(ctx context.Context, results []TestResult, port i
 			return true
 		}
 	}
+	consecutiveRateLimited := 0
 	for i := range results {
 		select {
 		case <-ctx.Done():
@@ -210,7 +217,13 @@ func runOfficialSpeedTestsCore(ctx context.Context, results []TestResult, port i
 		speedMB, speedErr := runWindowedSpeedTest(ctx, results[i].IP, port, customURL)
 		if speedErr != "" {
 			results[i].Speed = speedErr
+			if isSpeedRateLimited(speedErr) {
+				consecutiveRateLimited++
+			} else {
+				consecutiveRateLimited = 0
+			}
 		} else {
+			consecutiveRateLimited = 0
 			results[i].Speed = fmt.Sprintf("%.2fMB/s", speedMB)
 			if speedMB >= speedMinMB {
 				qualified = append(qualified, results[i])
@@ -225,6 +238,12 @@ func runOfficialSpeedTestsCore(ctx context.Context, results []TestResult, port i
 		if !interSpeedPause() {
 			return results, qualified
 		}
+		if consecutiveRateLimited >= 3 {
+			if onRateLimited != nil {
+				onRateLimited()
+			}
+			break
+		}
 	}
 	return results, qualified
 }
@@ -235,7 +254,7 @@ func runOfficialSpeedBatch(ctx context.Context, session *appSession, port int, c
 	}
 	if speedLimit <= 0 {
 		session.sendWSMessage("log", "官方批量测速已关闭（测速上限 0）")
-		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": 0, "limit": speedLimit})
+		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": 0, "limit": speedLimit, "rateLimited": false})
 		return
 	}
 	if speedMin <= 0 {
@@ -253,16 +272,20 @@ func runOfficialSpeedBatch(ctx context.Context, session *appSession, port int, c
 	}
 	if len(results) == 0 {
 		session.sendWSMessage("log", "没有可用的详细测试结果，跳过官方批量测速")
-		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": 0, "limit": speedLimit})
+		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": 0, "limit": speedLimit, "rateLimited": false})
 		return
 	}
 	sortOfficialTestResults(results)
 
 	session.sendWSMessage("log", fmt.Sprintf("开始测速：%d 条记录，目标上限=%d，测速阈值=%.2fMB/s", len(results), speedLimit, speedMin))
 	session.sendWSMessage("official_speed_progress", map[string]interface{}{"current": 0, "total": len(results), "qualified": 0, "limit": speedLimit})
+	rateLimited := false
 	updated, qualified := runOfficialSpeedTestsCore(ctx, results, port, speedLimit, speedMin, customURL, func(current, total, qualified int, result TestResult) {
 		session.sendWSMessage("speed_test_result", map[string]string{"ip": result.IP, "speed": result.Speed})
 		session.sendWSMessage("official_speed_progress", map[string]interface{}{"current": current, "total": total, "qualified": qualified, "limit": speedLimit})
+	}, func() {
+		rateLimited = true
+		session.sendWSMessage("log", speedRateLimitMessage)
 	})
 
 	session.testMutex.Lock()
@@ -278,10 +301,12 @@ func runOfficialSpeedBatch(ctx context.Context, session *appSession, port int, c
 	session.testMutex.Unlock()
 	if ctx.Err() != nil {
 		session.sendWSMessage("log", "官方批量测速已终止")
+	} else if rateLimited {
+		session.sendWSMessage("log", fmt.Sprintf("官方批量测速已因速率限制停止，达标 %d/%d", len(qualified), speedLimit))
 	} else {
 		session.sendWSMessage("log", fmt.Sprintf("官方批量测速完成，达标 %d/%d", len(qualified), speedLimit))
 	}
 	if ctx.Err() == nil {
-		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": len(qualified), "limit": speedLimit})
+		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": len(qualified), "limit": speedLimit, "rateLimited": rateLimited})
 	}
 }

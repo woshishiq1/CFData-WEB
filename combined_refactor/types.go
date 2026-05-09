@@ -22,7 +22,7 @@ const (
 )
 
 var (
-	//go:embed index.html login.html
+	//go:embed index.html login.html favicon.png
 	staticFiles     embed.FS
 	customDNSServer string
 	customDNSForced bool

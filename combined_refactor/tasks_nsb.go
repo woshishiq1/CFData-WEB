@@ -249,7 +249,6 @@ func runNSBScanWorkers(ctx context.Context, total, maxWorkers, resultLimit int, 
 	}
 	close(jobs)
 	if wasCanceled {
-		wg.Wait()
 		return true
 	}
 	for {
@@ -259,7 +258,12 @@ func runNSBScanWorkers(ctx context.Context, total, maxWorkers, resultLimit int, 
 		if remaining <= 0 {
 			break
 		}
-		acceptedTotal := <-completion
+		var acceptedTotal int
+		select {
+		case <-ctx.Done():
+			return true
+		case acceptedTotal = <-completion:
+		}
 		mu.Lock()
 		inFlight--
 		if acceptedTotal > accepted {
@@ -271,7 +275,6 @@ func runNSBScanWorkers(ctx context.Context, total, maxWorkers, resultLimit int, 
 			onProgress(currentAccepted)
 		}
 	}
-	wg.Wait()
 	return wasCanceled
 }
 
@@ -305,6 +308,7 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
 	}
 	client := http.Client{
 		Transport: wrapDebugTransport("nsb-speed", transport),
+		Timeout:   speedWindow + 5*time.Second,
 	}
 
 	fullURL := fmt.Sprintf("%s://%s%s", parsedURL.Scheme, parsedURL.Host, parsedURL.RequestURI())
@@ -646,7 +650,6 @@ func runNSBSpeedWorkers(ctx context.Context, results []iptestResult, maxWorkers,
 			wasCanceled = true
 			next = len(results)
 			close(jobs)
-			wg.Wait()
 			return true
 		case item := <-done:
 			inFlight--
