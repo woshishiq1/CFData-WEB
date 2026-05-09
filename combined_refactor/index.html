@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cloudflare IP Data (Combined)</title>
+    <link rel="icon" type="image/png" href="favicon.png">
     <style>
         :root {
             --primary-color: #3b82f6;
@@ -632,11 +633,22 @@
         }
 
         .speed-result {
-            min-width: 88px;
-            display: inline-block;
+            min-width: 136px;
+            display: inline-grid;
+            grid-template-columns: minmax(74px, auto) 48px;
+            align-items: center;
+            column-gap: 6px;
             text-align: left;
             white-space: nowrap;
             flex-shrink: 0;
+        }
+
+        .speed-cell-content {
+            display: inline-grid;
+            grid-template-columns: minmax(74px, auto) 48px;
+            align-items: center;
+            column-gap: 6px;
+            white-space: nowrap;
         }
 
         .export-btn {
@@ -679,9 +691,65 @@
         }
 
         .speed-unqualified {
-            text-decoration: line-through;
-            text-decoration-thickness: 2px;
-            text-decoration-color: currentColor;
+            position: relative;
+        }
+
+        tr.row-unqualified td {
+            position: relative;
+        }
+
+        tr.row-unqualified td::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: rgba(245, 158, 11, 0.10);
+        }
+
+        .result-status-tag {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 0;
+            padding: 1px 6px;
+            border-radius: 999px;
+            font-size: 10px;
+            line-height: 1.4;
+            font-weight: 700;
+            vertical-align: middle;
+            background: rgba(148, 163, 184, 0.16);
+            color: var(--text-secondary);
+            border: 1px solid rgba(148, 163, 184, 0.26);
+        }
+
+        .result-status-slot {
+            display: inline-flex;
+            width: 48px;
+            justify-content: flex-start;
+        }
+
+        .result-status-tag.unqualified {
+            background: rgba(245, 158, 11, 0.14);
+            color: #b45309;
+            border-color: rgba(245, 158, 11, 0.28);
+        }
+
+        .result-status-tag.qualified {
+            background: rgba(16, 185, 129, 0.14);
+            color: #047857;
+            border-color: rgba(16, 185, 129, 0.28);
+        }
+
+        tr.row-qualified td {
+            position: relative;
+        }
+
+        tr.row-qualified td::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: rgba(16, 185, 129, 0.12);
         }
 
         .modal-mask {
@@ -1280,7 +1348,7 @@
                 </div>
                 <div class="option-item">
                     <span class="label">🏁 结果上限</span>
-                    <input id="officialSpeedLimit" type="number" value="20" placeholder="0 关闭测速">
+                    <input id="officialSpeedLimit" type="number" value="10" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
                     <span class="label">🧪 开启自动测速</span>
@@ -1656,6 +1724,8 @@
         let officialAutoSpeedPending = false;
         let officialAutoStage = '';
         let officialBatchSpeedRunning = false;
+        let officialTestCompletePending = false;
+        let officialSpeedEndedByRateLimit = false;
         let webDebugMode = false;
         let webDebugErrors = [];
         let currentSpeedTestingIP = '';
@@ -2051,6 +2121,14 @@
             progressBar.style.animation = p >= 100 ? 'none' : 'stripe 1s linear infinite';
         }
 
+        function showStoppingProgress() {
+            progressBox.style.display = 'block';
+            progressBar.style.background = 'var(--warning-color)';
+            progressBar.style.width = '100%';
+            progressBar.style.animation = 'none';
+            progressBar.textContent = '正在手动终止...';
+        }
+
         function resetProgress() {
             progressBar.style.width = '0%';
             progressBar.style.background = 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent), linear-gradient(to right, var(--primary-color), #60a5fa)';
@@ -2219,6 +2297,18 @@
             return test?.Speed || test?.speed || '';
         }
 
+        function getSpeedStatus(value, isQualified) {
+            const text = String(value || '').trim();
+            if (!text || text === '-' || text === '未测速') return 'untested';
+            return isQualified ? 'qualified' : 'unqualified';
+        }
+
+        function renderSpeedStatusTag(status) {
+            if (status === 'qualified') return '<span class="result-status-slot"><span class="result-status-tag qualified" title="合格">合格</span></span>';
+            if (status === 'untested') return '<span class="result-status-slot"></span>';
+            return '<span class="result-status-slot"><span class="result-status-tag unqualified" title="不合格">不合格</span></span>';
+        }
+
         function matchesOfficialQualifiedFilter(row, filter) {
             filter = normalizeQualifiedFilter(filter);
             if (filter === 'all') return true;
@@ -2248,6 +2338,7 @@
             let latencyIndex = headers.indexOf('网络延迟');
             let speedIndex = headers.indexOf('下载速度');
             const speedQualified = speedIndex < 0 || isNSBSpeedQualified(r[speedIndex]);
+            const speedStatus = speedIndex < 0 ? 'qualified' : getSpeedStatus(r[speedIndex], speedQualified);
             return headers.map((_, idx) => {
                 const val = escapeHTML(r[idx] ?? '');
                 const rawVal = String(r[idx] ?? '');
@@ -2261,13 +2352,19 @@
                     return `<td style="color:${color}; font-weight:600;">${val}</td>`;
                 } else if (idx === speedIndex && speedIndex !== -1) {
                     const speedVal = parseFloat(rawVal);
-                    const color = speedVal > SPEED_GREEN ? '#10b981' : (speedVal > 0 ? '#f59e0b' : '#ef4444');
+                    const color = speedStatus === 'untested' ? 'inherit' : (speedVal > SPEED_GREEN ? '#10b981' : (speedVal > 0 ? '#f59e0b' : '#ef4444'));
                     const cls = speedQualified ? '' : ' class="speed-unqualified"';
-                    return `<td${cls} style="color:${color}; font-weight:600;">${val}</td>`;
+                    return `<td${cls} style="color:${color}; font-weight:600;"><span class="speed-cell-content"><span>${val}</span>${renderSpeedStatusTag(speedStatus)}</span></td>`;
                 } else {
                     return `<td>${val}</td>`;
                 }
             }).join('');
+        }
+
+        function nsbRowStatusFromCSV(headers, row) {
+            const speedIndex = (headers || []).map(normalizeNSBHeader).indexOf('下载速度');
+            if (speedIndex < 0) return 'qualified';
+            return getSpeedStatus(row[speedIndex], isNSBSpeedQualified(row[speedIndex]));
         }
 
         function renderScanRowsCSV(headers, rows) {
@@ -2280,7 +2377,8 @@
             filteredRows.forEach((r) => {
                 const visibleRow = filterNSBRow(headers, r);
                 const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
-                tbody.insertAdjacentHTML('beforeend', `<tr>${tds}</tr>`);
+                const rowStatus = nsbRowStatusFromCSV(headers, r);
+                tbody.insertAdjacentHTML('beforeend', `<tr class="${rowStatus === 'qualified' ? 'row-qualified' : (rowStatus === 'unqualified' ? 'row-unqualified' : '')}">${tds}</tr>`);
             });
 
             updateBadge('scanCount', filteredRows.length);
@@ -2333,7 +2431,8 @@
                 const visibleHeaders = getVisibleNSBHeaders();
                 const visibleRow = filterNSBRow(NSB_LIVE_HEADERS, nsbRowToArray(row));
                 const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
-                tbody.insertAdjacentHTML('beforeend', `<tr>${tds}</tr>`);
+                const rowStatus = getSpeedStatus(row.speed, isNSBSpeedQualified(row.speed));
+                tbody.insertAdjacentHTML('beforeend', `<tr class="${rowStatus === 'qualified' ? 'row-qualified' : (rowStatus === 'unqualified' ? 'row-unqualified' : '')}">${tds}</tr>`);
             });
             updateBadge('scanCount', rows.length);
         }
@@ -2519,11 +2618,12 @@
             const port = res.Port || parseInt(document.getElementById('testPort').value) || 443;
             const meta = testResultToObject(res);
             const speedText = res.Speed || '未测速';
-            const speedColor = speedText.includes('MB/s') ? (parseFloat(speedText) > SPEED_GREEN ? '#10b981' : '#f59e0b') : (speedText === '未测速' ? '' : '#ef4444');
+            const speedStatus = getSpeedStatus(speedText, isOfficialSpeedQualified(speedText));
+            const speedColor = speedText.includes('MB/s') ? (parseFloat(speedText) > SPEED_GREEN ? '#10b981' : '#f59e0b') : (speedText === '未测速' ? 'inherit' : '#ef4444');
             const isTesting = currentSpeedTestingIP === res.IP;
             const speedDisabled = isTesting || isTaskRunning || officialBatchSpeedRunning;
             const buttonText = isTesting ? '测速中' : (res.Speed ? '重新测速' : '测速');
-            const row = `<tr><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};">${speedText}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
+            const row = `<tr class="${speedStatus === 'qualified' ? 'row-qualified' : (speedStatus === 'unqualified' ? 'row-unqualified' : '')}"><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};"><span>${speedText}</span>${renderSpeedStatusTag(speedStatus)}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
             document.querySelector('#testTable tbody').insertAdjacentHTML('beforeend', row);
         }
 
@@ -2541,6 +2641,8 @@
 
         function setOfficialTestQualifiedFilter(value) {
             officialTestQualifiedFilter = normalizeQualifiedFilter(value);
+            const filter = document.getElementById('officialTestQualifiedFilter');
+            if (filter && filter.value !== officialTestQualifiedFilter) filter.value = officialTestQualifiedFilter;
             if (currentMode === 'official') renderAllTestResults();
         }
 
@@ -2605,16 +2707,22 @@
             const item = testData.find((r) => r.IP === data.ip);
             if (item) item.Speed = data.speed;
             officialSpeedEnabledForResults = testData.some((r) => isOfficialSpeedQualified(r.Speed));
+            const speedStatus = getSpeedStatus(data.speed, isOfficialSpeedQualified(data.speed));
             if (currentSpeedTestingIP === data.ip) {
                 currentSpeedTestingIP = '';
             }
             if (val) {
-                val.textContent = data.speed;
-                val.style.color = data.speed.includes('MB/s') ? (parseFloat(data.speed) > SPEED_GREEN ? '#10b981' : '#f59e0b') : '#ef4444';
+                val.innerHTML = `<span>${escapeHTML(data.speed)}</span>${renderSpeedStatusTag(speedStatus)}`;
+                val.style.color = data.speed.includes('MB/s') ? (parseFloat(data.speed) > SPEED_GREEN ? '#10b981' : '#f59e0b') : (speedStatus === 'untested' ? 'inherit' : '#ef4444');
+                const tr = val.closest('tr');
+                if (tr) {
+                    tr.classList.toggle('row-qualified', speedStatus === 'qualified');
+                    tr.classList.toggle('row-unqualified', speedStatus === 'unqualified');
+                }
             }
             if (btn) {
                 btn.textContent = '重新测速';
-                btn.disabled = false;
+                btn.disabled = isTaskRunning || officialBatchSpeedRunning;
             }
             updateBatchSpeedButton();
         }
@@ -2625,6 +2733,12 @@
             const speedMin = parseFloat(document.getElementById('officialSpeedMin')?.value || '0.1') || 0.1;
             const speedLimit = parseInt(document.getElementById('officialSpeedLimit')?.value || '0', 10) || 0;
             return { port, url, speedMin, speedLimit, results: testData.slice() };
+        }
+
+        function syncOfficialSpeedConfigState(cfg = getOfficialSpeedConfig()) {
+            officialSpeedMinValue = cfg.speedMin;
+            officialSpeedEnabledForResults = cfg.speedLimit > 0;
+            return cfg;
         }
 
         function updateBatchSpeedButton() {
@@ -2640,19 +2754,20 @@
                 if (!auto) alert('请先完成数据中心详细测试');
                 return false;
             }
-            const cfg = getOfficialSpeedConfig();
+            const cfg = syncOfficialSpeedConfigState();
             if (cfg.speedLimit <= 0) {
                 if (!auto) alert('测速结果上限必须大于 0');
                 else log('官方自动测速已跳过：测速结果上限为 0');
                 return false;
             }
-            officialSpeedMinValue = cfg.speedMin;
             officialBatchSpeedRunning = true;
             isTaskRunning = true;
             isStoppingTask = false;
             runningTaskLabel = '官方一键测速';
             runningTaskMode = 'official';
             runningTaskTab = 'test';
+            testData.forEach((row) => { row.Speed = ''; });
+            renderAllTestResults();
             setStartLoading(getRunningButtonText());
             resetProgress();
             progressBox.style.display = 'block';
@@ -2753,6 +2868,7 @@
                     }
                     isStoppingTask = true;
                     setStartLoading('正在停止...');
+                    showStoppingProgress();
                 }
                 return;
             }
@@ -2769,9 +2885,8 @@
             const threads = parseInt(document.getElementById('scanThreads').value) || 100;
             const port = parseInt(document.getElementById('testPort').value) || 443;
             const delay = parseInt(document.getElementById('testDelay').value) || 0;
-            const officialSpeedConfig = getOfficialSpeedConfig();
+            const officialSpeedConfig = syncOfficialSpeedConfigState();
             const autoSpeed = String(document.getElementById('officialAutoSpeed')?.value || 'off').toLowerCase() === 'on';
-            officialSpeedMinValue = officialSpeedConfig.speedMin;
             officialSpeedEnabledForResults = autoSpeed && officialSpeedConfig.speedLimit > 0;
             officialAutoSpeedPending = autoSpeed;
             officialAutoStage = autoSpeed ? 'scan' : '';
@@ -3617,9 +3732,9 @@
                     if (isStoppingTask) break;
                     if (currentMode === 'official') {
                         testData = msg.data;
-                        finishRunningTask('✨ 开始扫描与测试');
                         renderAllTestResults();
                         onTestComplete();
+                        officialTestCompletePending = true;
                         updateProgress(msg.data.length, msg.data.length, '测试完成');
                         if (officialAutoSpeedPending && officialAutoStage === 'test') {
                             officialAutoStage = 'speed';
@@ -3644,12 +3759,21 @@
                     officialAutoSpeedPending = false;
                     officialAutoStage = '';
                     officialBatchSpeedRunning = false;
-                    officialSpeedEnabledForResults = testData.some((r) => isOfficialSpeedQualified(r.Speed));
+                    officialSpeedEndedByRateLimit = !!msg.data?.rateLimited;
+                    officialSpeedEnabledForResults = (msg.data?.qualified || 0) > 0;
                     finishRunningTask('✨ 开始扫描与测试');
                     updateBatchSpeedButton();
+                    setOfficialTestQualifiedFilter(officialSpeedEnabledForResults ? 'qualified' : 'all');
                     renderAllTestResults();
                     sortAndRenderScanResults();
-                    updateProgress(100, 100, '测速完成');
+                    if (officialSpeedEndedByRateLimit) {
+                        progressBar.style.background = 'var(--warning-color)';
+                        progressBar.style.width = '100%';
+                        progressBar.style.animation = 'none';
+                        progressBar.textContent = '检测到触发速率限制，请稍后重试或更换网络环境';
+                    } else {
+                        updateProgress(100, 100, '测速完成');
+                    }
                     autoUploadOfficialResults();
                     break;
                 case 'github_upload_result':
@@ -3703,6 +3827,9 @@
                         clearTimeout(nsbLiveRenderTimer);
                         nsbLiveRenderTimer = null;
                     }
+                    if (nsbSpeedEnabledForResults) {
+                        setNSBTableQualifiedFilter((msg.data.qualifiedCount || 0) > 0 ? 'qualified' : 'all');
+                    }
                     renderScanRowsCSV(nsbHeaders, nsbRows);
                     const nsbStatus = msg.data.status || 'complete';
                     const nsbMessage = msg.data.message || '测试完成';
@@ -3729,6 +3856,8 @@
                     officialAutoSpeedPending = false;
                     officialAutoStage = '';
                     officialBatchSpeedRunning = false;
+                    officialTestCompletePending = false;
+                    officialSpeedEndedByRateLimit = false;
                     finishRunningTask('✨ 开始扫描与测试');
                     updateBatchSpeedButton();
                     finishCompactIPv4();
@@ -3749,6 +3878,9 @@
                             isTaskRunning = false;
                             showDCSelection(dcList);
                             window.setTimeout(maybeStartOfficialAutoTest, 300);
+                        } else if (officialBatchSpeedRunning) {
+                            officialBatchSpeedRunning = false;
+                            finishRunningTask('✨ 开始扫描与测试');
                         }
                         resetCurrentSpeedButton();
                         updateBatchSpeedButton();
@@ -3761,6 +3893,8 @@
                     officialAutoSpeedPending = false;
                     officialAutoStage = '';
                     officialBatchSpeedRunning = false;
+                    officialTestCompletePending = false;
+                    officialSpeedEndedByRateLimit = false;
                     if (currentSpeedTestingIP) {
                         resetCurrentSpeedButton();
                     }
@@ -3823,7 +3957,15 @@
                     }
                     finishRunningTask('✨ 开始扫描与测试');
                     updateBatchSpeedButton();
-                    updateProgress(100, 100, '完成');
+                    if (officialTestCompletePending) {
+                        officialTestCompletePending = false;
+                        renderAllTestResults();
+                        updateProgress(testData.length, Math.max(testData.length, 1), '测试完成');
+                    } else if (officialSpeedEndedByRateLimit) {
+                        officialSpeedEndedByRateLimit = false;
+                    } else {
+                        updateProgress(100, 100, '完成');
+                    }
                     if (currentMode === 'official' && officialAutoSpeedPending && officialAutoStage === 'scan') {
                         window.setTimeout(maybeStartOfficialAutoTest, 100);
                     } else if (currentMode === 'official' && officialAutoSpeedPending && officialAutoStage === 'speed') {

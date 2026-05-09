@@ -192,6 +192,15 @@ func main() {
 		handleLoginPage(w, r)
 	})
 	http.HandleFunc("/auth/logout", handleLogout)
+	http.HandleFunc("/favicon.png", func(w http.ResponseWriter, r *http.Request) {
+		data, err := staticFiles.ReadFile("favicon.png")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(data)
+	})
 
 	http.HandleFunc("/", requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		data, err := staticFiles.ReadFile("index.html")

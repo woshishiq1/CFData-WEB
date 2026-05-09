@@ -191,7 +191,7 @@ var (
 		{name: "testport", description: "官方模式详细测试与测速端口", defaultValue: "443"},
 		{name: "delay", description: "官方模式延迟阈值（毫秒）", defaultValue: "500"},
 		{name: "dc", description: "指定数据中心；不填时自动选择最低延迟数据中心", defaultValue: ""},
-		{name: "speedlimit", description: "官方模式测速达标结果上限；0 表示关闭官方测速", defaultValue: "0"},
+		{name: "speedlimit", description: "官方模式测速达标结果上限；0 表示关闭官方测速", defaultValue: "10"},
 		{name: "speedmin", description: "官方模式测速达标下限，单位 MB/s", defaultValue: "0.1"},
 	}
 	cliNSBFlags = []cliFlagInfo{
@@ -228,7 +228,7 @@ func registerCLIFlags() *cliConfig {
 	flag.BoolVar(&cfg.nsbQualified, "nsbqualified", true, "非标模式只导出测速合格结果")
 	flag.StringVar(&cfg.nsbDC, "nsbdc", "", "非标模式指定结果数据中心")
 	flag.StringVar(&cfg.outFile, "out", "ip.csv", "CLI 输出文件名")
-	flag.IntVar(&cfg.speedLimit, "speedlimit", 0, "官方模式测速达标结果上限；0 表示关闭官方测速")
+	flag.IntVar(&cfg.speedLimit, "speedlimit", 10, "官方模式测速达标结果上限；0 表示关闭官方测速")
 	flag.Float64Var(&cfg.speedMin, "speedmin", 0.1, "官方模式测速达标下限，单位 MB/s")
 	flag.BoolVar(&cfg.enableTLS, "tls", true, "非标模式是否启用 TLS")
 	flag.BoolVar(&cfg.compactNSB, "compact", true, "非标模式导出精简表格列")
@@ -455,7 +455,7 @@ func defaultCLIExportConfig() cliExportConfig {
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: "speed.cloudflare.com/__down?bytes=99999999", DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 0, SpeedMin: 0.1, File: "", SourceURL: "", NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 20, Format: "csv", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
+	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: "speed.cloudflare.com/__down?bytes=99999999", DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 10, SpeedMin: 0.1, File: "", SourceURL: "", NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 20, Format: "csv", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
@@ -632,7 +632,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "testport", Description: "官方模式详细测试与测速端口", Default: "443"},
 		{Name: "delay", Description: "延迟阈值，单位毫秒", Default: "500"},
 		{Name: "dc", Description: "官方模式指定数据中心；留空自动选择最低延迟数据中心", Default: ""},
-		{Name: "speedlimit", Description: "官方模式测速达标结果上限；0 表示关闭官方测速", Default: "0"},
+		{Name: "speedlimit", Description: "官方模式测速达标结果上限；0 表示关闭官方测速", Default: "10"},
 		{Name: "speedmin", Description: "官方模式测速达标下限，单位 MB/s", Default: "0.1"},
 		{Name: "file", Description: "非标模式输入文件路径", Default: ""},
 		{Name: "sourceurl", Description: "非标模式网络输入 URL；与 file 同时提供时优先使用 file", Default: ""},
@@ -1109,6 +1109,8 @@ func runOfficialSpeedTests(ctx context.Context, session *appSession, results []T
 		if speedMB, ok := parseSpeedMBForSort(result.Speed); ok && speedMB >= speedMinMB {
 			fmt.Printf("%s[official]%s 达标 %d/%d\n", ansiGreen, ansiReset, qualifiedCount, limit)
 		}
+	}, func() {
+		fmt.Printf("%s[official]%s %s\n", ansiYellow, ansiReset, speedRateLimitMessage)
 	})
 	return qualified
 }
@@ -1161,7 +1163,7 @@ func printCLIConfig(cfg *cliConfig) {
 		{"testport", lookupCLIFlagDescription(cliOfficialFlags, "testport"), strconv.Itoa(cfg.port), "443"},
 		{"delay", lookupCLIFlagDescription(cliOfficialFlags, "delay"), strconv.Itoa(cfg.delay), "500"},
 		{"dc", lookupCLIFlagDescription(cliOfficialFlags, "dc"), cfg.dc, ""},
-		{"speedlimit", lookupCLIFlagDescription(cliOfficialFlags, "speedlimit"), strconv.Itoa(cfg.speedLimit), "0"},
+		{"speedlimit", lookupCLIFlagDescription(cliOfficialFlags, "speedlimit"), strconv.Itoa(cfg.speedLimit), "10"},
 		{"speedmin", lookupCLIFlagDescription(cliOfficialFlags, "speedmin"), fmt.Sprintf("%.2f", cfg.speedMin), "0.1"},
 	})
 	printGroup("非标模式参数", []item{
