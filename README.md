@@ -4,7 +4,7 @@
 
 CFData-Web 是一个基于 Go 开发的 Cloudflare IP 测试与筛选工具，提供本地 Web/CLI，能够在浏览器/终端中查看扫描进度、测试结果、测速结果和导出数据，适合用于 Cloudflare 相关网络测试、节点筛选和研究验证场景。
 
-<img width="2118" height="1232" alt="image" src="https://github.com/user-attachments/assets/49f03241-9904-47b4-a50a-839062534053" />
+![image](img/demo.png)
 
 
 

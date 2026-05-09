@@ -138,21 +138,31 @@ jobs:
           tag_name: ${{ steps.get-version.outputs.VERSION }}
           name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
           body: |
-            ## ${{ steps.get-version.outputs.VERSION }}
+            ## ${{ steps.get-version.outputs.VERSION }} 中文说明
 
+            构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
 
-            构建时间 / Built Time: ${{ steps.get-time.outputs.BUILD_TIME }}
+            构建方式：GitHub Actions
 
+            采用 GitHub Actions 自动构建。
 
-            构建方式 / Built with: GitHub Actions
+            支持 macOS / Windows / Linux（ARM64、AMD64）。
 
+            Android 等非标准 Linux 环境可尝试使用 Linux 版本运行。
 
-            采用 GitHub Actions 自动构建
-            Automated build via GitHub Actions
-            支持 macOS / Windows / Linux（ARM64、AMD64）
-            Supports macOS / Windows / Linux (ARM64, AMD64)
-            非标准 Linux 环境可使用 Linux 版本运行
-            Non-standard Linux environments can run the Linux version
+            ---
+
+            ## ${{ steps.get-version.outputs.VERSION }} English Notes
+
+            Built Time: ${{ steps.get-time.outputs.BUILD_TIME }}
+
+            Built with: GitHub Actions
+
+            Automatically built via GitHub Actions.
+
+            Supports macOS / Windows / Linux (ARM64, AMD64).
+
+            Android and other non-standard Linux environments can try the Linux version.
           files: artifacts/*
           draft: false
           prerelease: ${{ contains(steps.get-version.outputs.VERSION, '-') }}
