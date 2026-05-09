@@ -997,8 +997,9 @@ func runOfficialCLI(cfg *cliConfig) error {
 	} else if len(results) == 0 {
 		fmt.Printf("%s[official]%s 没有可用的详细测试结果，跳过测速\n", ansiYellow, ansiReset)
 	} else {
-		setCLIProgress(session, "speed", 0, len(results))
-		fmt.Printf("%s[official]%s 开始串行测速，达标上限=%d，下限=%.2fMB/s\n", ansiGreen, ansiReset, cfg.speedLimit, cfg.speedMin)
+		sortOfficialTestResults(results)
+		setCLIProgress(session, "speed", 0, cfg.speedLimit)
+		fmt.Printf("%s[official]%s 开始测速：目标上限=%d，测速阈值=%.2fMB/s\n", ansiGreen, ansiReset, cfg.speedLimit, cfg.speedMin)
 		results = runOfficialSpeedTests(context.Background(), session, results, cfg.port, cfg.speedLimit, cfg.speedMin)
 	}
 	return writeCLIExportAndMaybeUpload(cfg, officialResultRows(scanResults, results), "official")
@@ -1103,7 +1104,7 @@ func pickBestDataCenter(scanResults []ScanResult) string {
 
 func runOfficialSpeedTests(ctx context.Context, session *appSession, results []TestResult, port int, limit int, speedMinMB float64) []TestResult {
 	_, qualified := runOfficialSpeedTestsCore(ctx, results, port, limit, speedMinMB, speedTestURL, func(current, total, qualifiedCount int, result TestResult) {
-		setCLIProgress(session, "speed", current, total)
+		setCLIProgress(session, "speed", min(qualifiedCount, limit), limit)
 		fmt.Printf("%s[speed]%s %s %s:%d %s\n", ansiMagenta, ansiReset, renderCLIProgress(session, "speed"), result.IP, port, colorizeSpeedString(result.Speed))
 		if speedMB, ok := parseSpeedMBForSort(result.Speed); ok && speedMB >= speedMinMB {
 			fmt.Printf("%s[official]%s 达标 %d/%d\n", ansiGreen, ansiReset, qualifiedCount, limit)

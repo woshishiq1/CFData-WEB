@@ -144,8 +144,6 @@ func testIPLatency(ctx context.Context, ip string, port int, delay int) *TestRes
 }
 
 func runOfficialTask(ctx context.Context, session *appSession, ipType int, scanMaxThreads int, port int) {
-	session.sendWSMessage("log", "开始扫描任务...")
-
 	filename := "ips-v4.txt"
 	apiURL := "https://www.baipiao.eu.org/cloudflare/ips-v4"
 	if ipType == 6 {
@@ -169,12 +167,11 @@ func runOfficialTask(ctx context.Context, session *appSession, ipType int, scanM
 	} else {
 		ipList = getRandomIPv4s(ipList)
 	}
+	session.sendWSMessage("log", fmt.Sprintf("开始扫描：%d 条记录", len(ipList)))
 
 	session.scanMutex.Lock()
 	session.scanResults = []ScanResult{}
 	session.scanMutex.Unlock()
-
-	session.sendWSMessage("log", fmt.Sprintf("正在扫描 %d 个 IP 地址...", len(ipList)))
 
 	total := len(ipList)
 	session.sendWSMessage("scan_progress", map[string]interface{}{
@@ -285,7 +282,7 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 		return
 	}
 
-	session.sendWSMessage("log", fmt.Sprintf("开始对 %s 的 %d 个 IP 进行详细测试...", selectedDC, len(testIPList)))
+	session.sendWSMessage("log", fmt.Sprintf("开始测试：%s，%d 个 IP", selectedDC, len(testIPList)))
 
 	var results []TestResult
 	var resMutex sync.Mutex
@@ -334,24 +331,39 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 		return
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		if results[i].LossRate != results[j].LossRate {
-			return results[i].LossRate < results[j].LossRate
-		}
-		minI := results[i].MinLatency / time.Millisecond
-		minJ := results[j].MinLatency / time.Millisecond
-		if minI != minJ {
-			return minI < minJ
-		}
-		if results[i].MaxLatency != results[j].MaxLatency {
-			return results[i].MaxLatency < results[j].MaxLatency
-		}
-		return results[i].AvgLatency < results[j].AvgLatency
-	})
+	sortOfficialTestResults(results)
 
 	session.testMutex.Lock()
 	session.testResults = append([]TestResult(nil), results...)
 	session.testMutex.Unlock()
 
 	session.sendWSMessage("test_complete", results)
+}
+
+func sortOfficialTestResults(results []TestResult) {
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].LossRate != results[j].LossRate {
+			return results[i].LossRate < results[j].LossRate
+		}
+		minI := latencyDisplayMilliseconds(results[i].MinLatency)
+		minJ := latencyDisplayMilliseconds(results[j].MinLatency)
+		if minI != minJ {
+			return minI < minJ
+		}
+		maxI := latencyDisplayMilliseconds(results[i].MaxLatency)
+		maxJ := latencyDisplayMilliseconds(results[j].MaxLatency)
+		if maxI != maxJ {
+			return maxI < maxJ
+		}
+		avgI := latencyDisplayMilliseconds(results[i].AvgLatency)
+		avgJ := latencyDisplayMilliseconds(results[j].AvgLatency)
+		if avgI != avgJ {
+			return avgI < avgJ
+		}
+		return results[i].IP < results[j].IP
+	})
+}
+
+func latencyDisplayMilliseconds(value time.Duration) int64 {
+	return int64((value + time.Millisecond/2) / time.Millisecond)
 }

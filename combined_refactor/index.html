@@ -1104,6 +1104,27 @@
                 grid-row: 2;
             }
 
+            #test .section-box h3 .table-actions {
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-rows: auto auto;
+            }
+
+            #officialTestQualifiedFilter {
+                grid-column: 1;
+                grid-row: 1 / span 2;
+                align-self: stretch;
+            }
+
+            #btnBatchSpeed {
+                grid-column: 2;
+                grid-row: 1;
+            }
+
+            #btnTestResultAction {
+                grid-column: 2;
+                grid-row: 2;
+            }
+
             .section-box h3 .table-actions .export-btn {
                 grid-column: 2;
                 grid-row: 1;
@@ -1456,7 +1477,7 @@
                             <option value="unqualified">仅展示不合格</option>
                         </select>
                         <button class="action-btn export-btn" id="btnBatchSpeed" onclick="startOfficialBatchSpeed(false)" disabled>🚀 一键测速</button>
-                        <button class="action-btn export-btn" onclick="openResultModal('test')">📥 结果操作</button>
+                        <button class="action-btn export-btn" id="btnTestResultAction" onclick="openResultModal('test')">📥 结果操作</button>
                     </span>
                 </h3>
                 <div class="scroll-table" style="max-height:520px;">
@@ -2017,7 +2038,16 @@
             }
             const p = Math.min(Math.max((current / total) * 100, 0), 100);
             progressBar.style.width = `${Math.round(p)}%`;
-            progressBar.textContent = `${text || ''} ${Math.round(p)}%`;
+            progressBar.textContent = `${text || ''} ${current || 0}/${total} (${Math.round(p)}%)`;
+            progressBar.style.animation = p >= 100 ? 'none' : 'stripe 1s linear infinite';
+        }
+
+        function updateQualifiedSpeedProgress(current, total) {
+            const safeCurrent = current || 0;
+            const safeTotal = total || 1;
+            const p = Math.min(Math.max((safeCurrent / safeTotal) * 100, 0), 100);
+            progressBar.style.width = `${Math.round(p)}%`;
+            progressBar.textContent = `测速中 ${safeCurrent}/${safeTotal} (${Math.round(p)}%)`;
             progressBar.style.animation = p >= 100 ? 'none' : 'stripe 1s linear infinite';
         }
 
@@ -2475,6 +2505,9 @@
             progressBox.style.display = 'block';
             showDCSelection(dcList);
             if (!wsSend({ type: 'start_test', data: { dc, port, delay } })) {
+                currentTestingDC = '';
+                isTaskRunning = false;
+                showDCSelection(dcList);
                 finishRunningTask('✨ 重新开始扫描');
                 alert('连接未就绪，请等待重连后再试');
                 return;
@@ -2591,7 +2624,7 @@
             const url = document.getElementById('speedTestUrl')?.value.trim() || defaultSpeedTestUrl;
             const speedMin = parseFloat(document.getElementById('officialSpeedMin')?.value || '0.1') || 0.1;
             const speedLimit = parseInt(document.getElementById('officialSpeedLimit')?.value || '0', 10) || 0;
-            return { port, url, speedMin, speedLimit, results: testData };
+            return { port, url, speedMin, speedLimit, results: testData.slice() };
         }
 
         function updateBatchSpeedButton() {
@@ -3560,13 +3593,13 @@
                     addScanResult(msg.data, currentMode === 'official' && runningTaskMode !== 'nsb');
                     break;
                 case 'scan_complete_wait_dc':
+                    const wasStoppingScan = isStoppingTask;
                     finishRunningTask('✨ 重新开始扫描');
                     if (currentMode === 'official') {
                         sortAndRenderScanResults();
                         showDCSelection(msg.data);
-                        updateProgress(msg.data.length ? 100 : 0, 100, '扫描完成，选择数据中心');
-                        if (officialAutoSpeedPending && officialAutoStage === 'scan') {
-                            window.setTimeout(maybeStartOfficialAutoTest, 200);
+                        if (!wasStoppingScan) {
+                            updateProgress(msg.data.length ? 100 : 0, 100, '扫描完成，选择数据中心');
                         }
                     }
                     break;
@@ -3584,13 +3617,12 @@
                     if (isStoppingTask) break;
                     if (currentMode === 'official') {
                         testData = msg.data;
+                        finishRunningTask('✨ 开始扫描与测试');
                         renderAllTestResults();
                         onTestComplete();
-                        finishRunningTask('✨ 开始扫描与测试');
                         updateProgress(msg.data.length, msg.data.length, '测试完成');
                         if (officialAutoSpeedPending && officialAutoStage === 'test') {
                             officialAutoStage = 'speed';
-                            if (!startOfficialBatchSpeed(true)) autoUploadOfficialResults();
                         } else {
                             autoUploadOfficialResults();
                         }
@@ -3604,7 +3636,7 @@
                     if (isStoppingTask) break;
                     {
                         const p = msg.data || {};
-                        updateProgress(p.current || 0, p.total || 1, `测速中，达标 ${p.qualified || 0}/${p.limit || 0}`);
+                        updateQualifiedSpeedProgress(p.qualified || 0, p.limit || 1);
                     }
                     break;
                 case 'official_speed_complete':
@@ -3649,8 +3681,11 @@
                         const p = msg.data || {};
                         const percent = parseFloat(p.percent || 0);
                         const txt = p.text || '处理中';
-                        updateProgress(p.current || 0, p.total || 1, `${txt}`);
-                        progressBar.textContent = `${txt} ${p.current || 0}/${p.total || 0} (${percent.toFixed(2)}%)`;
+                        if (p.phase === 'speed') {
+                            updateQualifiedSpeedProgress(p.current || 0, p.total || 1);
+                        } else {
+                            updateProgress(p.current || 0, p.total || 1, `${txt}`);
+                        }
                     }
                     break;
                 case 'nsb_scan_result':
@@ -3708,6 +3743,13 @@
                     recordWebDebugError('server_error', msg.data);
                     isStoppingTask = false;
                     if (String(msg.data || '').includes('已有任务正在运行')) {
+                        if (officialAutoSpeedPending && officialAutoStage === 'test') {
+                            officialAutoStage = 'scan';
+                            currentTestingDC = '';
+                            isTaskRunning = false;
+                            showDCSelection(dcList);
+                            window.setTimeout(maybeStartOfficialAutoTest, 300);
+                        }
                         resetCurrentSpeedButton();
                         updateBatchSpeedButton();
                         log('错误: ' + msg.data);
@@ -3746,7 +3788,7 @@
                         const p = msg.data || {};
                         const percent = parseFloat(p.percent || 0);
                         updateProgress(p.current || 0, p.total || 1, `精简第 ${p.pass || 1} 轮`);
-                        progressBar.textContent = `精简第 ${p.pass || 1} 轮 ${p.current || 0}/${p.total || 0} (${percent.toFixed(2)}%) 已保留 ${p.found || 0}`;
+                        progressBar.textContent = `精简第 ${p.pass || 1} 轮 ${p.current || 0}/${p.total || 1} (${Math.round(percent)}%) 已保留 ${p.found || 0}`;
                     }
                     break;
                 case 'compact_ipv4_hit':
@@ -3775,7 +3817,7 @@
                     break;
                 case 'task_complete':
                     if (isStoppingTask) break;
-                    if (officialBatchSpeedRunning || (officialAutoSpeedPending && officialAutoStage === 'speed')) {
+                    if (officialBatchSpeedRunning) {
                         updateBatchSpeedButton();
                         break;
                     }
@@ -3784,6 +3826,10 @@
                     updateProgress(100, 100, '完成');
                     if (currentMode === 'official' && officialAutoSpeedPending && officialAutoStage === 'scan') {
                         window.setTimeout(maybeStartOfficialAutoTest, 100);
+                    } else if (currentMode === 'official' && officialAutoSpeedPending && officialAutoStage === 'speed') {
+                        window.setTimeout(() => {
+                            if (!startOfficialBatchSpeed(true)) autoUploadOfficialResults();
+                        }, 100);
                     }
                     break;
             }
