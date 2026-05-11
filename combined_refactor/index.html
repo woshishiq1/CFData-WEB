@@ -2108,8 +2108,22 @@
             }
             const p = Math.min(Math.max((current / total) * 100, 0), 100);
             progressBar.style.width = `${Math.round(p)}%`;
-            progressBar.textContent = `${text || ''} ${current || 0}/${total} (${Math.round(p)}%)`;
+            const displayCurrent = p >= 100 ? total : (current || 0);
+            progressBar.textContent = `${text || ''} ${displayCurrent}/${total} (${Math.round(p)}%)`;
             progressBar.style.animation = p >= 100 ? 'none' : 'stripe 1s linear infinite';
+        }
+
+        function completeProgressWithCurrentCount(text = '完成') {
+            const currentText = progressBar.textContent || '';
+            const match = currentText.match(/(\d+)\s*\/\s*(\d+)/);
+            const total = match ? parseInt(match[2], 10) : 0;
+            if (Number.isFinite(total) && total > 0) {
+                updateProgress(total, total, text);
+                return;
+            }
+            progressBar.style.width = '100%';
+            progressBar.style.animation = 'none';
+            progressBar.textContent = text;
         }
 
         function updateQualifiedSpeedProgress(current, total) {
@@ -2181,7 +2195,7 @@
             } else {
                 renderScanHeaders('nsb');
                 renderAllNSBLiveRows();
-                updateBadge('scanCount', nsbLiveRows.length);
+                    updateBadge('scanCount', nsbLiveRows.length);
             }
         }
 
@@ -2336,6 +2350,7 @@
             let ipIndex = headers.indexOf('IP地址');
             let portIndex = headers.indexOf('端口号');
             let latencyIndex = headers.indexOf('网络延迟');
+            let lossIndex = headers.indexOf('丢包率');
             let speedIndex = headers.indexOf('下载速度');
             const speedQualified = speedIndex < 0 || isNSBSpeedQualified(r[speedIndex]);
             const speedStatus = speedIndex < 0 ? 'qualified' : getSpeedStatus(r[speedIndex], speedQualified);
@@ -2349,6 +2364,10 @@
                 } else if (idx === latencyIndex && latencyIndex !== -1) {
                     const latencyVal = parseFloat(rawVal);
                     const color = getLatencyColor(latencyVal);
+                    return `<td style="color:${color}; font-weight:600;">${val}</td>`;
+                } else if (idx === lossIndex && lossIndex !== -1) {
+                    const lossVal = parseFloat(rawVal);
+                    const color = Number.isFinite(lossVal) && lossVal > 0 ? '#ef4444' : '#10b981';
                     return `<td style="color:${color}; font-weight:600;">${val}</td>`;
                 } else if (idx === speedIndex && speedIndex !== -1) {
                     const speedVal = parseFloat(rawVal);
@@ -2384,8 +2403,8 @@
             updateBadge('scanCount', filteredRows.length);
         }
 
-        const NSB_LIVE_HEADERS = ['IP地址', '端口号', 'TLS', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
-        const NSB_COMPACT_HEADERS = ['IP地址', '端口号', 'TLS', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织'];
+        const NSB_LIVE_HEADERS = ['IP地址', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
+        const NSB_COMPACT_HEADERS = ['IP地址', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织'];
 
         function normalizeNSBHeader(header) {
             if (header === 'IP') return 'IP地址';
@@ -2412,7 +2431,7 @@
 
         function nsbRowToArray(row) {
             return [
-                row.ip || '', row.port || '', row.tls ?? '-', row.latency || '-', row.speed || '-',
+                row.ip || '', row.port || '', row.tls ?? '-', row.lossRate || '0%', row.latency || '-', row.speed || '-',
                 row.outboundIP || '-', row.ipType || '-', row.dc || '-', row.loc || '-',
                 row.region || '-', row.city || '-', row.asnNumber || '-', row.asnOrg || '-',
                 row.visitScheme || '-', row.tlsVersion || '-', row.sni || '-', row.httpVersion || '-',
@@ -2640,6 +2659,7 @@
         }
 
         function setOfficialTestQualifiedFilter(value) {
+            syncOfficialSpeedConfigState();
             officialTestQualifiedFilter = normalizeQualifiedFilter(value);
             const filter = document.getElementById('officialTestQualifiedFilter');
             if (filter && filter.value !== officialTestQualifiedFilter) filter.value = officialTestQualifiedFilter;
@@ -2647,6 +2667,7 @@
         }
 
         function renderAllTestResults() {
+            syncOfficialSpeedConfigState();
             const tbody = document.querySelector('#testTable tbody');
             tbody.innerHTML = '';
             const rows = getFilteredOfficialTestData();
@@ -2665,6 +2686,7 @@
         }
 
         function runSpeedTest(ip) {
+            syncOfficialSpeedConfigState();
             if (isTaskRunning || officialBatchSpeedRunning) {
                 log('当前已有任务运行，单个测速已忽略');
                 return;
@@ -2702,6 +2724,7 @@
         }
 
         function updateSpeedResult(data) {
+            syncOfficialSpeedConfigState();
             const btn = document.getElementById(`btn-speed-${data.ip.replace(/[:.]/g, '_')}`);
             const val = document.getElementById(`speed-val-${data.ip.replace(/[:.]/g, '_')}`);
             const item = testData.find((r) => r.IP === data.ip);
@@ -3714,7 +3737,7 @@
                         sortAndRenderScanResults();
                         showDCSelection(msg.data);
                         if (!wasStoppingScan) {
-                            updateProgress(msg.data.length ? 100 : 0, 100, '扫描完成，选择数据中心');
+                            completeProgressWithCurrentCount('扫描完成，选择数据中心');
                         }
                     }
                     break;
@@ -3772,7 +3795,7 @@
                         progressBar.style.animation = 'none';
                         progressBar.textContent = '检测到触发速率限制，请稍后重试或更换网络环境';
                     } else {
-                        updateProgress(100, 100, '测速完成');
+                        updateProgress(msg.data?.qualified || 0, msg.data?.limit || 1, '测速完成');
                     }
                     autoUploadOfficialResults();
                     break;
@@ -3964,7 +3987,7 @@
                     } else if (officialSpeedEndedByRateLimit) {
                         officialSpeedEndedByRateLimit = false;
                     } else {
-                        updateProgress(100, 100, '完成');
+                        completeProgressWithCurrentCount('完成');
                     }
                     if (currentMode === 'official' && officialAutoSpeedPending && officialAutoStage === 'scan') {
                         window.setTimeout(maybeStartOfficialAutoTest, 100);

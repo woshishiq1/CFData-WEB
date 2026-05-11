@@ -69,11 +69,11 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 
 	buf := make([]byte, 32*1024)
 	var totalBytes int64
-	var maxSpeedMB float64
 
-	timeout := time.After(5 * time.Second)
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	timeout := time.After(6 * time.Second)
+	warmupDone := false
+	var measuredBytes int64
+	var measuredStart time.Time
 
 	readerCtx, readerCancel := context.WithCancel(ctx)
 	defer readerCancel()
@@ -99,8 +99,6 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 		}
 	})
 
-	lastBytes := int64(0)
-	lastTime := start
 	done := false
 	canceled := false
 loop:
@@ -111,20 +109,16 @@ loop:
 			done = true
 		case <-timeout:
 			done = true
-		case now := <-ticker.C:
-			duration := now.Sub(lastTime).Seconds()
-			if duration > 0 {
-				diff := totalBytes - lastBytes
-				currentSpeedMB := float64(diff) / duration / 1024 / 1024
-				if currentSpeedMB > maxSpeedMB {
-					maxSpeedMB = currentSpeedMB
-				}
-			}
-			lastBytes = totalBytes
-			lastTime = now
 		case chunk := <-chunks:
 			if chunk.n > 0 {
 				totalBytes += int64(chunk.n)
+				if !warmupDone && time.Since(start) >= time.Second {
+					warmupDone = true
+					measuredStart = time.Now()
+				}
+				if warmupDone {
+					measuredBytes += int64(chunk.n)
+				}
 			}
 			if chunk.err != nil {
 				done = true
@@ -141,19 +135,18 @@ loop:
 		return 0, "测速任务已终止"
 	}
 
-	if totalBytes <= 0 || maxSpeedMB <= 0 {
+	if totalBytes <= 0 {
+		return 0, "0MB/s"
+	}
+	if !warmupDone || measuredBytes <= 0 {
 		return 0, "0MB/s"
 	}
 
-	duration := time.Since(start).Seconds()
+	duration := time.Since(measuredStart).Seconds()
 	if duration == 0 {
 		duration = 1
 	}
-	realSpeedMB := float64(totalBytes) / duration / 1024 / 1024
-	if maxSpeedMB > realSpeedMB {
-		return maxSpeedMB, ""
-	}
-	return realSpeedMB, ""
+	return float64(measuredBytes) / duration / 1024 / 1024, ""
 }
 
 func formatSpeedHTTPFailure(statusCode int) string {
