@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -82,6 +83,7 @@ type iptestResult struct {
 	region         string
 	city           string
 	latency        string
+	lossRate       float64
 	tcpDuration    time.Duration
 	outboundIP     string
 	ipType         string
@@ -111,6 +113,7 @@ type nsbScanMessage struct {
 	Region         string `json:"region"`
 	City           string `json:"city"`
 	Latency        string `json:"latency"`
+	LossRate       string `json:"lossRate"`
 	Speed          string `json:"speed"`
 	SpeedQualified bool   `json:"speedQualified"`
 	OutboundIP     string `json:"outboundIP"`
@@ -147,6 +150,7 @@ func (r *iptestResult) toNSBMessage(speedStr string) nsbScanMessage {
 		Region:         r.region,
 		City:           r.city,
 		Latency:        r.latency,
+		LossRate:       fmt.Sprintf("%.0f%%", r.lossRate*100),
 		Speed:          speedStr,
 		SpeedQualified: r.speedQualified,
 		OutboundIP:     r.outboundIP,
