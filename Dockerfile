@@ -8,14 +8,11 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
 
-# 复制 go mod 并下载依赖
 COPY go.mod go.sum ./
 RUN go mod download
 
-# 复制全部源代码
 COPY . .
 
-# 编译（注意这里改成 cfdata.go）
 RUN case ${TARGETPLATFORM} in \
       "linux/amd64")  GOARCH=amd64  ;; \
       "linux/arm64")  GOARCH=arm64  ;; \
@@ -29,17 +26,19 @@ RUN case ${TARGETPLATFORM} in \
 FROM --platform=$TARGETPLATFORM alpine:latest
 
 RUN apk add --no-cache ca-certificates tzdata \
-    && mkdir -p /root/cfdata-web \
-    && chmod 777 /root/cfdata-web
+    && mkdir -p /data \
+    && chmod 777 /data
 
-COPY --from=builder /cfdata /root/cfdata-web/cfdata
+# 二进制放到系统目录
+COPY --from=builder /cfdata /usr/local/bin/cfdata
 
-WORKDIR /root/cfdata-web
+# 默认工作目录设为数据目录
+WORKDIR /data
 
-VOLUME /root/cfdata-web
+VOLUME /data
 EXPOSE 13335
 
 USER root
 
-ENTRYPOINT ["./cfdata"]
+ENTRYPOINT ["cfdata"]
 CMD ["-port=13335"]
