@@ -26,7 +26,7 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
-          # 新增 armv7 支持
+          # 只添加这一行 armv7 支持
           - goos: linux
             goarch: arm
             goarm: 7
@@ -92,13 +92,7 @@ jobs:
       - name: Build
         run: |
           ext="${{ matrix.ext || '' }}"
-          # 针对 arm/v7 修改命名识别
-          if [ "${{ matrix.goarch }}" = "arm" ]; then
-            arch_name="armv7"
-          else
-            arch_name="${{ matrix.goarch }}"
-          fi
-          filename="cfdata-${{ matrix.goos }}-${arch_name}${ext}"
+          filename="cfdata-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm || '' }}${ext}"
           
           # 合并：针对 Android 开启 PIE 模式，适配安卓安全策略
           extra_flags=""
