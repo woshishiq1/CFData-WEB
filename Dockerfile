@@ -1,5 +1,5 @@
 # ====================== Builder Stage ======================
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 ARG TARGETPLATFORM
 RUN echo "Building on ${BUILDPLATFORM} for ${TARGETPLATFORM}"
@@ -8,14 +8,14 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
 
-# 复制 go mod
-COPY combined_refactor/go.mod combined_refactor/go.sum ./ 
+# 复制 go mod 并下载依赖
+COPY combined_refactor/go.mod combined_refactor/go.sum ./
 RUN go mod download
 
 # 复制全部源代码
 COPY combined_refactor/ ./
 
-# 按你的打包脚本方式编译
+# 编译（参考你项目的打包脚本）
 RUN case ${TARGETPLATFORM} in \
       "linux/amd64")  GOARCH=amd64  ;; \
       "linux/arm64")  GOARCH=arm64  ;; \
