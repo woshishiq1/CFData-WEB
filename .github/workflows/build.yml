@@ -26,6 +26,10 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
+          # 新增 armv7 支持
+          - goos: linux
+            goarch: arm
+            goarm: 7
           - goos: darwin
             goarch: amd64
           - goos: darwin
@@ -88,7 +92,13 @@ jobs:
       - name: Build
         run: |
           ext="${{ matrix.ext || '' }}"
-          filename="cfdata-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
+          # 针对 arm/v7 修改命名识别
+          if [ "${{ matrix.goarch }}" = "arm" ]; then
+            arch_name="armv7"
+          else
+            arch_name="${{ matrix.goarch }}"
+          fi
+          filename="cfdata-${{ matrix.goos }}-${arch_name}${ext}"
           
           # 合并：针对 Android 开启 PIE 模式，适配安卓安全策略
           extra_flags=""
@@ -102,6 +112,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.goarch }}
           GOOS: ${{ matrix.goos }}
+          GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
           GODEBUG: netdns=go
 
@@ -117,7 +128,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: asset-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext || '' }}
+          name: asset-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm || '' }}${{ matrix.ext || '' }}
           path: release_assets/*
 
   release:
