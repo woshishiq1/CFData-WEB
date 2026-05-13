@@ -164,7 +164,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				params.URL = speedTestURL
 			}
 			session.startTask(func(ctx context.Context, session *appSession) {
-				runOfficialSpeedBatch(ctx, session, params.Port, params.URL, params.SpeedLimit, params.SpeedMin, params.Results)
+				runOfficialSpeedBatch(ctx, session, params.Port, params.URL, params.SpeedLimit, params.SpeedMin, params.Results, params.SkipTested)
 			})
 		},
 		"start_nsb_task": func(data json.RawMessage) {
