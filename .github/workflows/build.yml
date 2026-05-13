@@ -36,6 +36,10 @@ jobs:
           - goos: windows
             goarch: arm64
             ext: ".exe"
+          # 合并：新增原生安卓支持
+          - goos: android
+            goarch: arm64
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,7 +50,7 @@ jobs:
           node-version: "24"
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v5
         with:
           go-version: "stable"
           cache: true
@@ -59,7 +63,6 @@ jobs:
         run: |
           build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
           echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
-
       - name: Set Version
         id: set-version
         run: |
@@ -67,35 +70,46 @@ jobs:
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
           fi
+          # 合并：兜底处理，确保版本号不为空
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
+          fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
-
       - name: Download CA Certificates
         run: |
           curl -fsSL --retry 3 --connect-timeout 10 \
             https://curl.se/ca/cacert.pem \
             -o combined_refactor/ca-certificates.crt
           cert_count=$(grep -c "BEGIN CERTIFICATE" combined_refactor/ca-certificates.crt || true)
-          echo "Downloaded ${cert_count} CA certificates before build."
-
+          echo "Downloaded ${cert_count} CA certificates."
       - name: Build
         run: |
           ext="${{ matrix.ext || '' }}"
           filename="cfdata-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
+          
+          # 合并：针对 Android 开启 PIE 模式，适配安卓安全策略
+          extra_flags=""
+          if [ "${{ matrix.goos }}" = "android" ]; then
+            extra_flags="-buildmode=pie"
+          fi
+          
           echo "Building ${filename}..."
           cd combined_refactor
-          go build -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../release_assets/${filename} .
+          go build $extra_flags -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../release_assets/${filename} .
         env:
           GOARCH: ${{ matrix.goarch }}
           GOOS: ${{ matrix.goos }}
+          CGO_ENABLED: 0
+          GODEBUG: netdns=go
 
       - name: Generate SHA256
         run: |
           cd release_assets
-          for file in *.sha256; do rm -f "$file"; done
+          # 清理可能存在的旧校验文件
+          rm -f *.sha256
           for file in $(find . -type f ! -name '*.sha256'); do
             sha256sum "$file" | awk '{print $1}' > "${file}.sha256"
           done
-
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -124,48 +138,36 @@ jobs:
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
           fi
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
+          fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
-
       - name: Get build time
         id: get-time
         run: |
           build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
           echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get-version.outputs.VERSION }}
           name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
           body: |
-            ## ${{ steps.get-version.outputs.VERSION }} 中文说明
-
-            构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
-
-            构建方式：GitHub Actions
-
-            采用 GitHub Actions 自动构建。
-
-            支持 macOS / Windows / Linux（ARM64、AMD64）。
-
-            Android 等非标准 Linux 环境可尝试使用 Linux 版本运行。
-
+            ## ${{ steps.get-version.outputs.VERSION }} 说明
+            - **构建时间 / Built Time:** ${{ steps.get-time.outputs.BUILD_TIME }}
+            - **构建方式 / Built with:** GitHub Actions
+            - **支持系统:** Windows, Linux, macOS, Android (Termux)
+            
             ---
-
-            ## ${{ steps.get-version.outputs.VERSION }} English Notes
-
-            Built Time: ${{ steps.get-time.outputs.BUILD_TIME }}
-
-            Built with: GitHub Actions
-
-            Automatically built via GitHub Actions.
-
-            Supports macOS / Windows / Linux (ARM64, AMD64).
-
-            Android and other non-standard Linux environments can try the Linux version.
+            ### Android 使用说明
+            请在 Termux 等环境中使用 `cfdata-android-arm64` 版本。
+            下载后请执行 `chmod +x cfdata-android-arm64` 赋予执行权限。
+            ### 校验
+            每个二进制文件均附带同名的 `.sha256` 校验文件。
           files: artifacts/*
           draft: false
           prerelease: ${{ contains(steps.get-version.outputs.VERSION, '-') }}
+          allowUpdates: true
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
