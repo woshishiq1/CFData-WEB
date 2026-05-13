@@ -7,9 +7,13 @@ RUN echo "Building on ${BUILDPLATFORM} for ${TARGETPLATFORM}"
 RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
-COPY combined_refactor/go.mod combined_refactor/go.sum ./
+
+# 复制 go mod 文件并下载依赖
+COPY go.mod go.sum ./
 RUN go mod download
-COPY combined_refactor/ ./
+
+# 复制全部源代码
+COPY . .
 
 RUN case ${TARGETPLATFORM} in \
       "linux/amd64")  GOARCH=amd64  ;; \
@@ -27,7 +31,7 @@ RUN apk add --no-cache ca-certificates tzdata \
     && mkdir -p /root/cfdata-web \
     && chmod 777 /root/cfdata-web
 
-# 把二进制复制到数据目录中
+# 把二进制复制到数据目录
 COPY --from=builder /cfdata /root/cfdata-web/cfdata
 
 WORKDIR /root/cfdata-web
@@ -37,6 +41,5 @@ EXPOSE 13335
 
 USER root
 
-# 直接在数据目录下运行二进制
 ENTRYPOINT ["./cfdata"]
 CMD ["-port=13335"]
