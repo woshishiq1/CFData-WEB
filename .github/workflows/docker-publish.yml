@@ -5,7 +5,7 @@ on:
     branches:
       - master  # master 推送时更新 latest
     tags:
-      - "v*"   # 任何分支（如 main）推 v* 标签时更新对应版本镜像
+      - "v*"    # 任何分支推 v* 标签时更新对应版本镜像
   workflow_dispatch: # 保留手动触发开关
 
 env:
@@ -20,7 +20,7 @@ jobs:
       - name: Checkout Master Branch
         uses: actions/checkout@v4
         with:
-          # 关键：强制锁定 master，确保 go.mod 是你改好的那个版本
+          # 关键：强制锁定 master，确保代码是最新的
           ref: master
 
       - name: Set up QEMU
@@ -36,6 +36,17 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      # --- 新增：提取版本号供编译使用 ---
+      - name: Set App Version
+        id: vars
+        run: |
+          version="${{ github.ref_name }}"
+          # 如果是 master 分支推送，版本号标记为 latest 或 master
+          if [[ "${{ github.ref_type }}" == "branch" ]]; then
+            version="latest"
+          fi
+          echo "APP_VERSION=$version" >> $GITHUB_OUTPUT
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -50,14 +61,14 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          # 一次性构建并合并 amd64, arm64, armv7
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
-          # 禁用生成冗余的 provenance 记录，让镜像列表看起来更干净
+          # 关键注入点：将提取的版本号传给 Dockerfile 里的 ARG APP_VERSION
+          build-args: |
+            APP_VERSION=${{ steps.vars.outputs.APP_VERSION }}
           provenance: false
           sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 缓存加速
           cache-from: type=gha
           cache-to: type=gha,mode=max
