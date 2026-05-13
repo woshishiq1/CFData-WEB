@@ -241,7 +241,7 @@ func runOfficialSpeedTestsCore(ctx context.Context, results []TestResult, port i
 	return results, qualified
 }
 
-func runOfficialSpeedBatch(ctx context.Context, session *appSession, port int, customURL string, speedLimit int, speedMin float64, fallbackResults []TestResult) {
+func runOfficialSpeedBatch(ctx context.Context, session *appSession, port int, customURL string, speedLimit int, speedMin float64, fallbackResults []TestResult, skipTested bool) {
 	if port <= 0 {
 		port = 443
 	}
@@ -267,6 +267,21 @@ func runOfficialSpeedBatch(ctx context.Context, session *appSession, port int, c
 		session.sendWSMessage("log", "没有可用的详细测试结果，跳过官方批量测速")
 		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": 0, "limit": speedLimit, "rateLimited": false})
 		return
+	}
+	if skipTested {
+		pending := results[:0]
+		for _, result := range results {
+			speedText := strings.TrimSpace(result.Speed)
+			if speedText == "" || speedText == "未测速" {
+				pending = append(pending, result)
+			}
+		}
+		results = pending
+		if len(results) == 0 {
+			session.sendWSMessage("log", "没有未测速的详细测试结果，跳过继续测速")
+			session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": 0, "limit": speedLimit, "rateLimited": false})
+			return
+		}
 	}
 	sortOfficialTestResults(results)
 

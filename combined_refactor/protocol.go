@@ -32,6 +32,7 @@ type startOfficialSpeedBatchRequest struct {
 	SpeedMin   float64      `json:"speedMin"`
 	SpeedLimit int          `json:"speedLimit"`
 	Results    []TestResult `json:"results"`
+	SkipTested bool         `json:"skipTested"`
 }
 
 type startNSBTaskRequest struct {
