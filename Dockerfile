@@ -4,8 +4,8 @@ FROM --platform=$BUILDPLATFORM golang:1.25.4-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
-# 新增：接收从 GitHub Action 传进来的版本号
-ARG APP_VERSION=latest
+# 接收从 GitHub Action 传进来的版本号，默认为 dev
+ARG APP_VERSION=dev
 
 WORKDIR /app
 RUN apk add --no-cache git ca-certificates
@@ -17,8 +17,7 @@ RUN go mod download
 # 拷贝源码
 COPY combined_refactor/ ./
 
-# 核心：在 ldflags 中注入版本号
-# 注意：确认你的代码里变量名是 appVersion 还是 version
+# 核心编译命令：使用小写的 appVersion 变量名
 RUN GOTOOLCHAIN=local CGO_ENABLED=0 \
     GOOS=${TARGETOS} \
     GOARCH=${TARGETARCH} \
