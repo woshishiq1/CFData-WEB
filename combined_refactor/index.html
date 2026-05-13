@@ -2611,6 +2611,8 @@
             autoUploadKeys = new Set();
             updateBadge('testCount', 0);
             testData = [];
+            officialSpeedEnabledForResults = false;
+            setOfficialTestQualifiedFilter('all');
             currentTestingDC = dc;
             document.querySelector('#testTable tbody').innerHTML = '';
             document.getElementById('currentTestDC').textContent = `测试中: ${dc}`;
