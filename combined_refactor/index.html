@@ -1509,13 +1509,15 @@
                     <span class="label">🔗 测速网址</span>
                     <div class="field-with-action">
                         <select id="officialSpeedUrlPreset" class="speed-url-select" onchange="applySpeedUrlPreset('speedTestUrl', this.value)">
-                            <option value="speed.okl.abrdns.com" selected>默认测速</option>
+                            <option value="auto" selected>自动选择</option>
                             <option value="speed.cloudflare.com/__down?bytes=99999999">Cloudflare</option>
+                            <option value="cf.090227.xyz/__down?bytes=99999999">CM提供</option>
+                            <option value="speed.okl.abrdns.com">备用测速</option>
                             <option value="custom">手动输入</option>
                         </select>
-                        <input id="speedTestUrl" type="text" value="speed.okl.abrdns.com"
-                            placeholder="例如 speed.okl.abrdns.com">
-                        <button class="mini-action-btn" title="恢复默认测速网站"
+                        <input id="speedTestUrl" type="text" value="自动选择"
+                            placeholder="例如 speed.okl.abrdns.com" oninput="markSpeedUrlCustom('officialSpeedUrlPreset')">
+                        <button class="mini-action-btn" title="恢复自动选择测速网站"
                             onclick="resetDefaultSpeedUrl('speedTestUrl', 'officialSpeedUrlPreset')">↺</button>
                     </div>
                 </div>
@@ -1600,13 +1602,15 @@
                     <span class="label">🔗 测速网址</span>
                     <div class="field-with-action">
                         <select id="nsbSpeedUrlPreset" class="speed-url-select" onchange="applySpeedUrlPreset('nsbSpeedUrl', this.value)">
-                            <option value="speed.okl.abrdns.com" selected>默认测速</option>
+                            <option value="auto" selected>自动选择</option>
                             <option value="speed.cloudflare.com/__down?bytes=99999999">Cloudflare</option>
+                            <option value="cf.090227.xyz/__down?bytes=99999999">CM提供</option>
+                            <option value="speed.okl.abrdns.com">备用测速</option>
                             <option value="custom">手动输入</option>
                         </select>
-                        <input id="nsbSpeedUrl" type="text" value="speed.okl.abrdns.com"
-                            placeholder="speed.okl.abrdns.com">
-                        <button class="mini-action-btn" title="恢复默认测速网站"
+                        <input id="nsbSpeedUrl" type="text" value="自动选择"
+                            placeholder="speed.okl.abrdns.com" oninput="markSpeedUrlCustom('nsbSpeedUrlPreset')">
+                        <button class="mini-action-btn" title="恢复自动选择测速网站"
                             onclick="resetDefaultSpeedUrl('nsbSpeedUrl', 'nsbSpeedUrlPreset')">↺</button>
                     </div>
                 </div>
@@ -1902,6 +1906,8 @@
         let nsbTableQualifiedFilter = 'all';
         let nsbSpeedMinValue = 0;
         let nsbSpeedEnabledForResults = false;
+        const AUTO_SPEED_URL_VALUE = 'auto';
+        const AUTO_SPEED_URL_LABEL = '自动选择';
         let officialTestQualifiedFilter = 'all';
         let officialSpeedMinValue = 0.1;
         let officialSpeedEnabledForResults = false;
@@ -2079,12 +2085,34 @@
         function applySpeedUrlPreset(targetId, value) {
             const input = document.getElementById(targetId);
             if (!input) return;
+            input.readOnly = false;
             if (value === 'custom') {
                 input.value = '';
                 input.focus();
                 return;
             }
+            if (value === AUTO_SPEED_URL_VALUE) {
+                input.value = AUTO_SPEED_URL_LABEL;
+                input.readOnly = true;
+                return;
+            }
             input.value = value || defaultSpeedTestUrl;
+        }
+
+        function resolveSpeedTestUrl(targetId, presetId) {
+            const input = document.getElementById(targetId);
+            const preset = document.getElementById(presetId);
+            if (preset && preset.value === AUTO_SPEED_URL_VALUE) {
+                return AUTO_SPEED_URL_VALUE;
+            }
+            const value = input ? input.value.trim() : '';
+            if (!value || value === AUTO_SPEED_URL_LABEL) return AUTO_SPEED_URL_VALUE;
+            return value;
+        }
+
+        function markSpeedUrlCustom(presetId) {
+            const preset = document.getElementById(presetId);
+            if (preset) preset.value = 'custom';
         }
 
         function syncSpeedUrlPreset(targetId, presetId) {
@@ -2092,14 +2120,23 @@
             const preset = document.getElementById(presetId);
             if (!input || !preset) return;
             const value = input.value.trim();
+            if (value === AUTO_SPEED_URL_LABEL) {
+                preset.value = AUTO_SPEED_URL_VALUE;
+                input.readOnly = true;
+                return;
+            }
             const option = Array.from(preset.options).find((item) => item.value === value);
             preset.value = option ? value : 'custom';
+            input.readOnly = false;
         }
 
         function resetDefaultSpeedUrl(targetId = 'speedTestUrl', presetId = '') {
             const input = document.getElementById(targetId);
             if (!input) return;
-            input.value = defaultSpeedTestUrl;
+            input.value = AUTO_SPEED_URL_LABEL;
+            input.readOnly = true;
+            const preset = presetId ? document.getElementById(presetId) : null;
+            if (preset) preset.value = AUTO_SPEED_URL_VALUE;
             if (presetId) syncSpeedUrlPreset(targetId, presetId);
         }
 
@@ -3147,7 +3184,7 @@
             if (speedVal) speedVal.textContent = '⏳...';
             currentSpeedTestingIP = ip;
             const port = parseInt(document.getElementById('testPort').value);
-            const customUrl = document.getElementById('speedTestUrl').value.trim() || defaultSpeedTestUrl;
+            const customUrl = resolveSpeedTestUrl('speedTestUrl', 'officialSpeedUrlPreset');
             if (!wsSend({ type: 'start_speed_test', data: { ip, port, url: customUrl } })) {
                 if (speedVal) speedVal.textContent = '连接未就绪';
                 if (btn) {
@@ -3193,7 +3230,7 @@
 
         function getOfficialSpeedConfig() {
             const port = parseInt(document.getElementById('testPort')?.value || '443', 10) || 443;
-            const url = document.getElementById('speedTestUrl')?.value.trim() || defaultSpeedTestUrl;
+            const url = resolveSpeedTestUrl('speedTestUrl', 'officialSpeedUrlPreset');
             const speedMin = parseFloat(document.getElementById('officialSpeedMin')?.value || '0.1') || 0.1;
             const speedLimit = parseInt(document.getElementById('officialSpeedLimit')?.value || '0', 10) || 0;
             return { port, url, speedMin, speedLimit, results: testData.slice() };
@@ -3435,7 +3472,7 @@
             const maxThreads = parseInt(document.getElementById('nsbThreads').value) || 100;
             const speedEnabled = String(document.getElementById('enableSpeedTest').value || 'off').toLowerCase() === 'on';
             const speedTestInput = parseInt(document.getElementById('nsbSpeedTest').value) || 0;
-            const speedURL = document.getElementById('nsbSpeedUrl').value.trim() || defaultSpeedTestUrl;
+            const speedURL = resolveSpeedTestUrl('nsbSpeedUrl', 'nsbSpeedUrlPreset');
             const outFile = document.getElementById('nsbOutFile').value.trim() || 'ip.csv';
             const speedTest = speedEnabled ? speedTestInput : 0;
             nsbSpeedEnabledForResults = speedTest > 0 && (parseInt(document.getElementById('nsbSpeedLimit').value) || 0) > 0;
@@ -4178,8 +4215,8 @@
                     proxyWarningBypassed = false;
                     if (webDebugMode) log('调试模式已开启，错误将输出到程序 log');
                     if (proxyWarningRequired) log(`代理检测警告：当前网络标签 ${cfCountry}`);
-                    document.getElementById('speedTestUrl').value = defaultSpeedTestUrl;
-                    document.getElementById('nsbSpeedUrl').value = defaultSpeedTestUrl;
+                    document.getElementById('speedTestUrl').value = AUTO_SPEED_URL_LABEL;
+                    document.getElementById('nsbSpeedUrl').value = AUTO_SPEED_URL_LABEL;
                     syncSpeedUrlPreset('speedTestUrl', 'officialSpeedUrlPreset');
                     syncSpeedUrlPreset('nsbSpeedUrl', 'nsbSpeedUrlPreset');
                     renderVersionInfo(msg.data || {});
