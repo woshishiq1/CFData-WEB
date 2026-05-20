@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   build:
+    name: Build Multi-Platform Binaries
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -41,6 +42,10 @@ jobs:
           - goos: windows
             goarch: arm64
             ext: ".exe"
+          # 合并：保留你自定义的原生安卓（Termux 等环境）支持
+          - goos: android
+            goarch: arm64
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,6 +77,10 @@ jobs:
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
           fi
+          # 合并：你的版本号兜底处理，确保在分支运行或为空时表现正常
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
+          fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
       - name: Download CA Certificates
@@ -80,23 +89,32 @@ jobs:
             https://curl.se/ca/cacert.pem \
             -o combined_refactor/ca-certificates.crt
           cert_count=$(grep -c "BEGIN CERTIFICATE" combined_refactor/ca-certificates.crt || true)
-          echo "Downloaded ${cert_count} CA certificates before build."
+          echo "Downloaded ${cert_count} CA certificates."
 
       - name: Build
         run: |
           ext="${{ matrix.ext || '' }}"
           filename="cfdata-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
+          
+          # 合并：你的个性化安全构建策略，针对 Android 开启 PIE 模式
+          extra_flags=""
+          if [ "${{ matrix.goos }}" = "android" ]; then
+            extra_flags="-buildmode=pie"
+          fi
+          
           echo "Building ${filename}..."
           cd combined_refactor
-          go build -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../release_assets/${filename} .
+          go build $extra_flags -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../release_assets/${filename} .
         env:
           GOARCH: ${{ matrix.goarch }}
           GOOS: ${{ matrix.goos }}
+          CGO_ENABLED: 0
+          GODEBUG: netdns=go
 
       - name: Generate SHA256
         run: |
           cd release_assets
-          for file in *.sha256; do rm -f "$file"; done
+          rm -f *.sha256
           for file in $(find . -type f ! -name '*.sha256'); do
             sha256sum "$file" | awk '{print $1}' > "${file}.sha256"
           done
@@ -108,7 +126,7 @@ jobs:
           path: release_assets/*
 
   android-apk:
-    name: Android APK
+    name: Android APK App
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -140,6 +158,9 @@ jobs:
           version="${{ github.event.inputs.version }}"
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
+          fi
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
           fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
@@ -198,7 +219,7 @@ jobs:
 
   release:
     name: Release
-    needs: [build, android-apk]
+    needs: [build, android-apk] # 合并：必须等待多平台二进制和 Android APK 两个任务同时跑完
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -218,6 +239,9 @@ jobs:
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
           fi
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
+          fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
       - name: Get build time
@@ -234,32 +258,30 @@ jobs:
           body: |
             ## ${{ steps.get-version.outputs.VERSION }} 中文说明
 
-            构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
+            - **构建时间 / Built Time:** ${{ steps.get-time.outputs.BUILD_TIME }}
+            - **构建方式 / Built with:** GitHub Actions
+            - **支持系统:** macOS / Windows / Linux (ARM64, AMD64), Android App 与 Android (Termux) 原生命令行。
 
-            构建方式：GitHub Actions
+            ---
 
-            采用 GitHub Actions 自动构建。
+            ### Android 使用说明 / Android Instructions
+            - **原生 App 版:** 下载 `cfdata-android-arm64.apk` 直接在手机上进行安装。
+            - **Termux 命令行版:** 请下载 `cfdata-android-arm64` 并在环境中使用。下载后需执行 `chmod +x cfdata-android-arm64` 赋予执行权限。
 
-            支持 macOS / Windows / Linux（ARM64、AMD64）。
-
-            支持 Android（ARM64 APK）。
+            ### 校验 / Checksums
+            每个二进制与应用文件均附带同名的 `.sha256` 校验文件。
 
             ---
 
             ## ${{ steps.get-version.outputs.VERSION }} English Notes
 
-            Built Time: ${{ steps.get-time.outputs.BUILD_TIME }}
-
-            Built with: GitHub Actions
-
-            Automatically built via GitHub Actions.
-
-            Supports macOS / Windows / Linux (ARM64, AMD64).
-
-            Supports Android (ARM64 APK).
+            - **Automatically built via GitHub Actions.**
+            - **Supports:** macOS / Windows / Linux (ARM64, AMD64), Android APK and Android (Termux) native binary.
           files: artifacts/*
           draft: false
+          # 合并：结合了手动点击面板选 pre-release，和基于分支版本号带有 `-` 的自动规则
           prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
+          allowUpdates: true
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
