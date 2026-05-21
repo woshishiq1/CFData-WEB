@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -309,19 +308,12 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
 	const speedWindow = 10 * time.Second
 	const speedMaxBytes = 200 * 1024 * 1024
 
-	if strings.TrimSpace(testURL) == "" {
-		testURL = speedTestURL
-	}
-
-	scheme := "http://"
+	scheme := "http"
 	if enableTLS {
-		scheme = "https://"
-	}
-	if !strings.HasPrefix(testURL, "http://") && !strings.HasPrefix(testURL, "https://") {
-		testURL = scheme + testURL
+		scheme = "https"
 	}
 
-	parsedURL, err := url.Parse(testURL)
+	parsedURL, err := parseSpeedTestURL(testURL, scheme)
 	if err != nil {
 		return 0, "测速地址解析失败: " + err.Error()
 	}
@@ -332,22 +324,23 @@ func runNSBDownloadSpeed(ctx context.Context, ip string, port int, enableTLS boo
 		},
 		TLSHandshakeTimeout: 10 * time.Second,
 		TLSClientConfig:     tlsConfigWithRootCAs(parsedURL.Hostname()),
+		DisableCompression:  true,
 	}
 	client := http.Client{
 		Transport: wrapDebugTransport("nsb-speed", transport),
 		Timeout:   speedWindow + 5*time.Second,
 	}
 
-	fullURL := fmt.Sprintf("%s://%s%s", parsedURL.Scheme, parsedURL.Host, parsedURL.RequestURI())
-
 	speedCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(speedCtx, "GET", fullURL, nil)
+	req, err := http.NewRequestWithContext(speedCtx, "GET", parsedURL.String(), nil)
 	if err != nil {
 		return 0, "测速请求构建失败: " + err.Error()
 	}
+	req.Host = parsedURL.Host
 	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("Accept-Encoding", "identity")
 
 	start := time.Now()
 	resp, err := client.Do(req)

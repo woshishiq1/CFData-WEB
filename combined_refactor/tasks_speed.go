@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -22,18 +21,9 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 		scheme = "https"
 	}
 
-	testURL := speedTestURL
-	if customURL != "" {
-		testURL = customURL
-	}
-	hasScheme := strings.HasPrefix(testURL, "http://") || strings.HasPrefix(testURL, "https://")
-	if !hasScheme {
-		testURL = scheme + "://" + testURL
-	}
-
-	parsedURL, err := url.Parse(testURL)
+	parsedURL, err := parseSpeedTestURL(customURL, scheme)
 	if err != nil {
-		return 0, "URL解析错误"
+		return 0, "URL解析错误: " + err.Error()
 	}
 
 	transport := &http.Transport{
@@ -43,20 +33,21 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 		},
 		TLSHandshakeTimeout: 10 * time.Second,
 		TLSClientConfig:     tlsConfigWithRootCAs(parsedURL.Hostname()),
+		DisableCompression:  true,
 	}
 	client := http.Client{
 		Transport: wrapDebugTransport("official-speed", transport),
 		Timeout:   15 * time.Second,
 	}
 
-	fullURL := fmt.Sprintf("%s://%s%s", parsedURL.Scheme, parsedURL.Host, parsedURL.RequestURI())
-	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", parsedURL.String(), nil)
 	if err != nil {
 		return 0, "请求构造错误"
 	}
+	req.Host = parsedURL.Host
 	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("Accept-Encoding", "identity")
 
-	start := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, "连接错误"
@@ -71,9 +62,7 @@ func runWindowedSpeedTest(ctx context.Context, ip string, port int, customURL st
 	var totalBytes int64
 
 	timeout := time.After(6 * time.Second)
-	warmupDone := false
-	var measuredBytes int64
-	var measuredStart time.Time
+	measuredStart := time.Now()
 
 	readerCtx, readerCancel := context.WithCancel(ctx)
 	defer readerCancel()
@@ -112,13 +101,6 @@ loop:
 		case chunk := <-chunks:
 			if chunk.n > 0 {
 				totalBytes += int64(chunk.n)
-				if !warmupDone && time.Since(start) >= time.Second {
-					warmupDone = true
-					measuredStart = time.Now()
-				}
-				if warmupDone {
-					measuredBytes += int64(chunk.n)
-				}
 			}
 			if chunk.err != nil {
 				done = true
@@ -138,15 +120,12 @@ loop:
 	if totalBytes <= 0 {
 		return 0, "0MB/s"
 	}
-	if !warmupDone || measuredBytes <= 0 {
-		return 0, "0MB/s"
-	}
 
 	duration := time.Since(measuredStart).Seconds()
 	if duration == 0 {
 		duration = 1
 	}
-	return float64(measuredBytes) / duration / 1024 / 1024, ""
+	return float64(totalBytes) / duration / 1024 / 1024, ""
 }
 
 func formatSpeedHTTPFailure(statusCode int) string {

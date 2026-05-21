@@ -4,13 +4,16 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -19,6 +22,10 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
@@ -40,6 +47,10 @@ public class MainActivity extends Activity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private WebView webView;
     private FrameLayout rootView;
+    private View loadingView;
+    private TextView loadingTitle;
+    private TextView loadingMessage;
+    private ProgressBar loadingSpinner;
     private Process backendProcess;
     private String pendingExportName;
     private byte[] pendingExportBytes;
@@ -51,10 +62,65 @@ public class MainActivity extends Activity {
         rootView = new FrameLayout(this);
         webView = new WebView(this);
         rootView.addView(webView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        loadingView = createLoadingView();
+        rootView.addView(loadingView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(rootView, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         applySystemBarInsets(rootView);
         configureWebView();
         startBackend();
+    }
+
+    private View createLoadingView() {
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.rgb(246, 248, 251));
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER_HORIZONTAL);
+        card.setPadding(dp(28), dp(30), dp(28), dp(28));
+        card.setElevation(dp(8));
+
+        GradientDrawable cardBackground = new GradientDrawable();
+        cardBackground.setColor(Color.WHITE);
+        cardBackground.setCornerRadius(dp(22));
+        cardBackground.setStroke(dp(1), Color.argb(160, 226, 232, 240));
+        card.setBackground(cardBackground);
+
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(getApplicationInfo().icon);
+        logo.setAdjustViewBounds(true);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(64), dp(64));
+        card.addView(logo, logoParams);
+
+        loadingTitle = new TextView(this);
+        loadingTitle.setText("CFData");
+        loadingTitle.setTextColor(Color.rgb(31, 41, 55));
+        loadingTitle.setTextSize(24);
+        loadingTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        loadingTitle.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        titleParams.topMargin = dp(18);
+        card.addView(loadingTitle, titleParams);
+
+        loadingMessage = new TextView(this);
+        loadingMessage.setText("正在启动本地服务...");
+        loadingMessage.setTextColor(Color.rgb(100, 116, 139));
+        loadingMessage.setTextSize(14);
+        loadingMessage.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        messageParams.topMargin = dp(8);
+        card.addView(loadingMessage, messageParams);
+
+        loadingSpinner = new ProgressBar(this);
+        loadingSpinner.setIndeterminate(true);
+        LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        spinnerParams.topMargin = dp(22);
+        card.addView(loadingSpinner, spinnerParams);
+
+        FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(48)), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        overlay.addView(card, cardParams);
+        return overlay;
     }
 
     private void applySystemBarInsets(View view) {
@@ -121,6 +187,7 @@ public class MainActivity extends Activity {
     private void startBackend() {
         executor.execute(() -> {
             try {
+                setLoadingMessage("正在准备本地服务...");
                 File backend = prepareBackendBinary();
                 ProcessBuilder builder = new ProcessBuilder(
                         backend.getAbsolutePath(),
@@ -130,12 +197,49 @@ public class MainActivity extends Activity {
                 builder.directory(getFilesDir());
                 builder.redirectErrorStream(true);
                 backendProcess = builder.start();
+                setLoadingMessage("正在连接本地服务...");
                 waitForBackend();
-                mainHandler.post(() -> webView.loadUrl("http://127.0.0.1:" + PORT));
+                mainHandler.post(() -> {
+                    setLoadingMessage("正在加载界面...");
+                    webView.loadUrl("http://127.0.0.1:" + PORT);
+                });
             } catch (Exception e) {
-                mainHandler.post(() -> Toast.makeText(this, "启动后端失败: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                mainHandler.post(() -> showStartupError("启动失败", "本地服务启动失败，请重新打开应用\n" + e.getMessage()));
             }
         });
+    }
+
+    private void setLoadingMessage(String message) {
+        mainHandler.post(() -> {
+            if (loadingMessage != null) {
+                loadingMessage.setText(message);
+            }
+        });
+    }
+
+    private void hideLoadingView() {
+        View view = loadingView;
+        if (view != null) {
+            view.animate().alpha(0f).setDuration(180).withEndAction(() -> view.setVisibility(View.GONE)).start();
+        }
+    }
+
+    private void showStartupError(String title, String message) {
+        if (loadingView != null) {
+            loadingView.setVisibility(View.VISIBLE);
+            loadingView.setAlpha(1f);
+        }
+        if (loadingTitle != null) {
+            loadingTitle.setText(title);
+            loadingTitle.setTextColor(Color.rgb(185, 28, 28));
+        }
+        if (loadingMessage != null) {
+            loadingMessage.setText(message);
+        }
+        if (loadingSpinner != null) {
+            loadingSpinner.setVisibility(View.GONE);
+        }
+        Toast.makeText(this, title + ": " + message, Toast.LENGTH_LONG).show();
     }
 
     private File prepareBackendBinary() throws IOException {
@@ -191,6 +295,7 @@ public class MainActivity extends Activity {
                         + "};"
                         + "})();";
                 view.evaluateJavascript(script, null);
+                hideLoadingView();
             }
 
             @Override
@@ -231,6 +336,10 @@ public class MainActivity extends Activity {
     private String sanitizeFileName(String fileName) {
         String name = fileName == null ? "cfdata-results.txt" : fileName.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
         return name.isEmpty() ? "cfdata-results.txt" : name;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     @Override

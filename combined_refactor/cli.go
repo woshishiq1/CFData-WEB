@@ -150,13 +150,14 @@ type cliFlagInfo struct {
 }
 
 var (
-	ansiReset   = "\033[0m"
-	ansiBold    = "\033[1m"
-	ansiGreen   = "\033[32m"
-	ansiYellow  = "\033[33m"
-	ansiRed     = "\033[31m"
-	ansiCyan    = "\033[36m"
-	ansiMagenta = "\033[35m"
+	ansiReset       = "\033[0m"
+	ansiBold        = "\033[1m"
+	ansiGreen       = "\033[32m"
+	ansiBrightGreen = "\033[92m"
+	ansiYellow      = "\033[33m"
+	ansiRed         = "\033[31m"
+	ansiCyan        = "\033[36m"
+	ansiMagenta     = "\033[35m"
 
 	cliCommonFlags = []cliFlagInfo{
 		{name: "cli", description: "是否启用命令行模式，不带时默认启动 Web（请用 -cli 或 -cli=true，不要写成 -cli true）", defaultValue: "false"},
@@ -169,7 +170,7 @@ var (
 		{name: "out", description: "输出文件名", defaultValue: "ip.csv"},
 		{name: "progress", description: "是否输出进度日志", defaultValue: "true"},
 		{name: "nocolor", description: "禁用颜色输出（cmd 等不支持 ANSI 的终端可开启避免乱码）", defaultValue: "false"},
-		{name: "url", description: "测速下载地址；可选 speed.cloudflare.com/__down?bytes=99999999", defaultValue: "speed.okl.abrdns.com"},
+		{name: "url", description: "测速下载地址；auto 表示从内置地址池随机选择", defaultValue: autoSpeedURLValue},
 		{name: "dns", description: "自定义 DNS 服务器，例如 1.1.1.1 或 223.5.5.5,8.8.8.8；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS", defaultValue: defaultDNSServers},
 		{name: "debug", description: "调试输出等级：error、all；true 等同 error", defaultValue: "false"},
 		{name: "compactipv4", description: "精简本地 IPv4 地址库：按 /24 子网测 TCP:80 连通性并覆盖 ips-v4.txt", defaultValue: "false"},
@@ -466,7 +467,7 @@ func defaultCLIExportConfig() cliExportConfig {
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: "speed.okl.abrdns.com", DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
+	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
@@ -636,7 +637,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "speedtest", Description: "非标测速线程数；表示同时测速的 IP 数量，0 表示不测速", Default: "0"},
 		{Name: "progress", Description: "输出进度日志", Default: "true", Options: []string{"true", "false"}},
 		{Name: "nocolor", Description: "禁用 ANSI 颜色输出", Default: "false", Options: []string{"true", "false"}},
-		{Name: "url", Description: "测速下载地址，不含协议前缀；可选 speed.cloudflare.com/__down?bytes=99999999", Default: "speed.okl.abrdns.com"},
+		{Name: "url", Description: "测速下载地址；auto 表示从内置地址池随机选择，也可填写完整 URL 或不含协议前缀的地址", Default: autoSpeedURLValue},
 		{Name: "dns", Description: "自定义 DNS 服务器；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS。用于 IP 库、locations、ASN、GitHub、网络 URL 输入等需要 DNS 的外部请求", Default: defaultDNSServers},
 		{Name: "debug", Description: "调试输出等级；error 记录程序错误和下载/更新/API 异常，all 额外包含测速失败等全部明细", Default: "false", Options: []string{"false", "error", "all", "true"}},
 		{Name: "compactipv4", Description: "精简本地 IPv4 地址库并覆盖 ips-v4.txt", Default: "false", Options: []string{"true", "false"}},
@@ -1153,7 +1154,7 @@ func printCLIConfig(cfg *cliConfig) {
 		{"out", lookupCLIFlagDescription(cliCommonFlags, "out"), cfg.outFile, "ip.csv"},
 		{"progress", lookupCLIFlagDescription(cliCommonFlags, "progress"), strconv.FormatBool(cfg.showProgress), "true"},
 		{"nocolor", lookupCLIFlagDescription(cliCommonFlags, "nocolor"), strconv.FormatBool(cfg.noColor), "false"},
-		{"url", lookupCLIFlagDescription(cliCommonFlags, "url"), speedTestURL, "speed.okl.abrdns.com"},
+		{"url", lookupCLIFlagDescription(cliCommonFlags, "url"), speedTestURL, autoSpeedURLValue},
 		{"debug", lookupCLIFlagDescription(cliCommonFlags, "debug"), debugFlagValue{}.String(), "false"},
 		{"compactipv4", lookupCLIFlagDescription(cliCommonFlags, "compactipv4"), strconv.FormatBool(cfg.compactIPv4), "false"},
 		{"config", lookupCLIFlagDescription(cliCommonFlags, "config"), cfg.export.ConfigFile, "二进制目录/cfdata-config.json"},
@@ -1253,10 +1254,19 @@ func colorizeLatencyString(latency string) string {
 
 func colorizeLatencyMS(ms int) string {
 	text := fmt.Sprintf("%dms", ms)
-	if ms < 100 {
+	if ms <= 50 {
 		return colorize(text, ansiGreen)
 	}
-	if ms < 200 {
+	if ms <= 100 {
+		return colorize(text, ansiBrightGreen)
+	}
+	if ms <= 200 {
+		return colorize(text, ansiYellow)
+	}
+	if ms <= 250 {
+		return colorize(text, ansiYellow)
+	}
+	if ms <= 3000 {
 		return colorize(text, ansiYellow)
 	}
 	return colorize(text, ansiRed)
