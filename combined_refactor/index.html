@@ -13,13 +13,13 @@
             --success-color: #10b981;
             --warning-color: #f59e0b;
             --error-color: #ef4444;
-            --bg-color: #f3f4f6;
-            --card-bg: #ffffff;
-            --text-main: #1f2937;
-            --text-secondary: #6b7280;
-            --border-color: #e5e7eb;
+            --bg-color: #eef1f5;
+            --card-bg: #fbfcfe;
+            --text-main: #243041;
+            --text-secondary: #64748b;
+            --border-color: #dbe2ea;
             --radius: 16px;
-            --shadow: 0 20px 25px -5px rgba(0, 0, 0, .05), 0 8px 10px -6px rgba(0, 0, 0, .05), 0 0 0 1px rgba(0, 0, 0, .02);
+            --shadow: 0 18px 24px -8px rgba(30, 41, 59, .08), 0 8px 10px -8px rgba(30, 41, 59, .06), 0 0 0 1px rgba(30, 41, 59, .03);
         }
 
         body.dark-theme {
@@ -77,7 +77,7 @@
             margin: 0;
             padding: 15px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: linear-gradient(135deg, #f6f8fb 0%, #e5e9f0 100%);
+            background: linear-gradient(135deg, #eef2f6 0%, #e3e8ef 100%);
             color: var(--text-main);
         }
 
@@ -88,7 +88,7 @@
             background: var(--card-bg);
             border-radius: var(--radius);
             padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.28);
             box-shadow: var(--shadow);
         }
 
@@ -225,7 +225,7 @@
             padding: 12px 16px;
             border-left: 4px solid var(--success-color);
             border-radius: 8px;
-            background: linear-gradient(to right, #ecfdf5, #f0fdf4);
+            background: linear-gradient(to right, #edf7f2, #f4faf6);
             color: #065f46;
             display: flex;
             align-items: center;
@@ -235,7 +235,7 @@
 
         .status-bar.error {
             border-left-color: var(--error-color);
-            background: linear-gradient(to right, #fef2f2, #fee2e2);
+            background: linear-gradient(to right, #fbefef, #f8e3e3);
             color: #991b1b;
         }
 
@@ -1941,8 +1941,14 @@
         const githubSessionTokens = new Map();
         const githubTokenCryptoSalt = 'cfdata-github-token-v1';
 
-        const LATENCY_GREEN = 100;
-        const LATENCY_YELLOW = 200;
+        const LATENCY_COLORS = [
+            { end: 50, color: '#1f8a3b' },
+            { end: 100, color: '#4caf50' },
+            { end: 200, color: '#9ccc65' },
+            { end: 250, color: '#e0c341' },
+            { end: 3000, color: '#e67e22' },
+            { end: Infinity, color: '#d64541' },
+        ];
         const SPEED_GREEN = 10;
 
         const statusEl = document.getElementById('status');
@@ -3198,7 +3204,8 @@
         function getLatencyColor(val) {
             const v = parseFloat(val);
             if (isNaN(v)) return 'inherit';
-            return v < LATENCY_GREEN ? '#10b981' : (v < LATENCY_YELLOW ? '#f59e0b' : '#ef4444');
+            const matched = LATENCY_COLORS.find((item) => v <= item.end);
+            return matched ? matched.color : 'inherit';
         }
 
         function updateSpeedResult(data) {

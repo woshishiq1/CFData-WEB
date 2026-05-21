@@ -150,13 +150,14 @@ type cliFlagInfo struct {
 }
 
 var (
-	ansiReset   = "\033[0m"
-	ansiBold    = "\033[1m"
-	ansiGreen   = "\033[32m"
-	ansiYellow  = "\033[33m"
-	ansiRed     = "\033[31m"
-	ansiCyan    = "\033[36m"
-	ansiMagenta = "\033[35m"
+	ansiReset       = "\033[0m"
+	ansiBold        = "\033[1m"
+	ansiGreen       = "\033[32m"
+	ansiBrightGreen = "\033[92m"
+	ansiYellow      = "\033[33m"
+	ansiRed         = "\033[31m"
+	ansiCyan        = "\033[36m"
+	ansiMagenta     = "\033[35m"
 
 	cliCommonFlags = []cliFlagInfo{
 		{name: "cli", description: "是否启用命令行模式，不带时默认启动 Web（请用 -cli 或 -cli=true，不要写成 -cli true）", defaultValue: "false"},
@@ -1253,10 +1254,19 @@ func colorizeLatencyString(latency string) string {
 
 func colorizeLatencyMS(ms int) string {
 	text := fmt.Sprintf("%dms", ms)
-	if ms < 100 {
+	if ms <= 50 {
 		return colorize(text, ansiGreen)
 	}
-	if ms < 200 {
+	if ms <= 100 {
+		return colorize(text, ansiBrightGreen)
+	}
+	if ms <= 200 {
+		return colorize(text, ansiYellow)
+	}
+	if ms <= 250 {
+		return colorize(text, ansiYellow)
+	}
+	if ms <= 3000 {
 		return colorize(text, ansiYellow)
 	}
 	return colorize(text, ansiRed)
