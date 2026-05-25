@@ -245,7 +245,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 					fileName = params.SourceURL
 					fileContent = content
 				}
-				runNSBTask(ctx, session, fileName, fileContent, params.OutFile, params.MaxThreads, params.SpeedTest, params.SpeedURL, params.EnableTLS, params.Delay, params.ResultLimit, params.DC, params.SpeedMin, params.SpeedLimit, params.Compact)
+				runNSBTask(ctx, session, fileName, fileContent, params.OutFile, params.MaxThreads, params.FallbackPort, params.SpeedTest, params.SpeedURL, params.EnableTLS, params.Delay, params.ResultLimit, params.DC, params.SpeedMin, params.SpeedLimit, params.Compact)
 			})
 		},
 		"start_nsb_speed_batch": func(data json.RawMessage) {

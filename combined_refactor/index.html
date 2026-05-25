@@ -1286,10 +1286,6 @@
                 width: 100%;
             }
 
-            #nsbCompactView {
-                width: 100%;
-            }
-
             .section-box h3 .table-actions .table-filter-select {
                 width: 100%;
             }
@@ -1505,7 +1501,7 @@
                     <input id="officialSpeedMin" type="number" value="0.1" step="0.01" placeholder="默认 0.1MB/s">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏁 结果上限</span>
+                    <span class="label">🏁 测试结果上限</span>
                     <input id="officialSpeedLimit" type="number" value="5" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
@@ -1567,12 +1563,12 @@
                         oninput="syncNSBInputMode('url')">
                 </div>
                 <div class="option-item">
-                    <span class="label">🚀 并发数</span>
-                    <input id="nsbThreads" type="number" value="100" placeholder="默认 100">
+                    <span class="label">🚪 备用端口</span>
+                    <input id="nsbFallbackPort" type="number" value="443" placeholder="关闭 TLS 默认 80，开启 TLS 默认 443">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏢 数据中心</span>
-                    <input id="nsbTargetDC" type="text" value="" placeholder="留空不限制，如 NRT">
+                    <span class="label">🚀 并发数</span>
+                    <input id="nsbThreads" type="number" value="100" placeholder="默认 100">
                 </div>
                 <div class="option-item">
                     <span class="label">⏱️ 延迟阈值 (ms)</span>
@@ -1587,11 +1583,11 @@
                     <input id="nsbSpeedMin" type="number" value="0.1" step="0.01" placeholder="默认 0.1MB/s">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏁 测速上限</span>
+                    <span class="label">🏁 测试结果上限</span>
                     <input id="nsbSpeedLimit" type="number" value="5" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
-                    <span class="label">🧪 开启测速</span>
+                    <span class="label">🧪 开启自动测速</span>
                     <select id="enableSpeedTest" onchange="updateNSBSpeedControls()">
                         <option value="on">开启</option>
                         <option value="off" selected>关闭</option>
@@ -1602,8 +1598,19 @@
                     <input id="nsbSpeedTest" type="number" value="0" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
+                    <span class="label">🏢 数据中心</span>
+                    <input id="nsbTargetDC" type="text" value="" placeholder="留空不限制，如 NRT">
+                </div>
+                <div class="option-item">
+                    <span class="label">📋 精简表格</span>
+                    <select id="nsbCompactView" onchange="setNSBCompactView(this.value === 'compact')">
+                        <option value="compact" selected>精简表格</option>
+                        <option value="full">完整表格</option>
+                    </select>
+                </div>
+                <div class="option-item">
                     <span class="label">🔗 TLS 模式</span>
-                    <select id="nsbTls">
+                    <select id="nsbTls" onchange="updateNSBFallbackPortDefault()">
                         <option value="on" selected>开启</option>
                         <option value="off">关闭</option>
                     </select>
@@ -1675,10 +1682,6 @@
                     <span>扫描结果 <span class="badge" id="scanCount">0</span></span>
                     <span class="table-actions">
                         <span class="nsb-scan-actions" id="nsbScanActions">
-                            <select id="nsbCompactView" class="table-filter-select" onchange="setNSBCompactView(this.value === 'compact')">
-                                <option value="compact" selected>精简表格</option>
-                                <option value="full">完整表格</option>
-                            </select>
                             <select id="nsbTableIPTypeFilter" class="table-filter-select" onchange="setNSBTableIPTypeFilter(this.value)">
                                 <option value="all" selected>展示全部类型</option>
                                 <option value="ipv4">仅展示IPV4</option>
@@ -2103,11 +2106,25 @@
                 if (String(speedTestInput.value).trim() === '0') {
                     speedTestInput.value = '5';
                 }
+                updateNSBSpeedButtons();
                 return;
             }
 
             speedTestInput.value = '0';
             speedTestInput.disabled = true;
+            updateNSBSpeedButtons();
+        }
+
+        function updateNSBFallbackPortDefault() {
+            const portInput = document.getElementById('nsbFallbackPort');
+            const tlsMode = String(document.getElementById('nsbTls')?.value || 'on').toLowerCase();
+            if (!portInput) return;
+            const current = parseInt(portInput.value, 10) || 0;
+            if (tlsMode === 'off' && (current <= 0 || current === 443)) {
+                portInput.value = '80';
+            } else if (tlsMode !== 'off' && (current <= 0 || current === 80)) {
+                portInput.value = '443';
+            }
         }
 
         function applySpeedUrlPreset(targetId, value) {
@@ -2716,7 +2733,6 @@
             }
             const compactToggle = document.getElementById('nsbCompactView');
             if (compactToggle) {
-                compactToggle.style.display = currentMode === 'nsb' ? 'inline-block' : 'none';
                 compactToggle.value = nsbCompactView ? 'compact' : 'full';
                 compactToggle.disabled = isTaskRunning;
             }
@@ -3470,6 +3486,11 @@
                 alert('请切换到非标模式后再测速');
                 return false;
             }
+            const enableSpeedTest = document.getElementById('enableSpeedTest');
+            if (enableSpeedTest && String(enableSpeedTest.value || 'off').toLowerCase() !== 'on') {
+                enableSpeedTest.value = 'on';
+                updateNSBSpeedControls();
+            }
             const rows = getNSBSpeedTargetRows();
             if (!rows.length) {
                 alert('当前没有可测速的非标结果');
@@ -3676,6 +3697,7 @@
             }
 
             const maxThreads = parseInt(document.getElementById('nsbThreads').value) || 100;
+            const fallbackPort = parseInt(document.getElementById('nsbFallbackPort').value) || 0;
             const speedEnabled = String(document.getElementById('enableSpeedTest').value || 'off').toLowerCase() === 'on';
             const speedTestInput = parseInt(document.getElementById('nsbSpeedTest').value) || 0;
             const speedURL = resolveSpeedTestUrl('nsbSpeedUrl', 'nsbSpeedUrlPreset');
@@ -3702,6 +3724,10 @@
             }
             if (resultLimit <= 0) {
                 alert('延迟结果上限必须填写非 0 正整数');
+                return;
+            }
+            if (fallbackPort <= 0 || fallbackPort > 65535) {
+                alert('备用端口必须为 1-65535');
                 return;
             }
 
@@ -3735,6 +3761,7 @@
                     sourceURL: hasURL ? sourceURL : '',
                     outFile,
                     maxThreads,
+                    fallbackPort,
                     speedTest,
                     speedURL,
                     enableTLS,

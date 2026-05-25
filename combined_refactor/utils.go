@@ -50,11 +50,15 @@ func parseIPList(content string) ([]string, error) {
 }
 
 func readIPs(filename string, enableTLS bool) ([]string, error) {
+	return readIPsWithFallbackPort(filename, defaultNSBPort(enableTLS))
+}
+
+func readIPsWithFallbackPort(filename string, fallbackPort int) ([]string, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
-	return parseNSBInputs(string(data), defaultNSBPort(enableTLS)), nil
+	return parseNSBInputs(string(data), fallbackPort), nil
 }
 
 func defaultNSBPort(enableTLS bool) int {

@@ -24,10 +24,10 @@ type nsbFailureRecord struct {
 	detail string
 }
 
-func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int, targetDC string, inputIndex int) (*iptestResult, *nsbFailureRecord) {
+func scanNSBEntry(ctx context.Context, item string, fallbackPort int, enableTLS bool, delay int, targetDC string, inputIndex int) (*iptestResult, *nsbFailureRecord) {
 	parts := strings.Fields(item)
-	if len(parts) != 2 {
-		record := &nsbFailureRecord{index: inputIndex, phase: "scan", reason: "格式错误", detail: "需要每行格式为: IP 空格 端口"}
+	if len(parts) < 1 || len(parts) > 2 {
+		record := &nsbFailureRecord{index: inputIndex, phase: "scan", reason: "格式错误", detail: "需要每行格式为: IP [端口]"}
 		if len(parts) > 0 {
 			record.ipAddr = parts[0]
 		}
@@ -37,10 +37,16 @@ func scanNSBEntry(ctx context.Context, item string, enableTLS bool, delay int, t
 		return nil, record
 	}
 	ipAddr := parts[0]
-	portStr := parts[1]
+	portStr := strconv.Itoa(fallbackPort)
+	if len(parts) == 2 {
+		portStr = parts[1]
+	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "端口无效", detail: err.Error()}
+	}
+	if port <= 0 {
+		return nil, &nsbFailureRecord{index: inputIndex, ipAddr: ipAddr, port: portStr, phase: "scan", reason: "端口无效", detail: "端口必须大于 0"}
 	}
 
 	const nsbLatencyAttempts = 3
@@ -425,7 +431,7 @@ done:
 	return float64(written) / duration.Seconds() / 1024, ""
 }
 
-func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent, outFile string, maxThreads, speedTest int, speedURL string, enableTLS bool, delay int, resultLimit int, targetDC string, speedMin float64, speedLimit int, compact bool) {
+func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent, outFile string, maxThreads, fallbackPort, speedTest int, speedURL string, enableTLS bool, delay int, resultLimit int, targetDC string, speedMin float64, speedLimit int, compact bool) {
 	session.sendWSMessage("log", fmt.Sprintf("开始非标优选：%s", fileName))
 
 	tmpFile, err := os.CreateTemp("", "cfdata-nsb-*.txt")
@@ -446,7 +452,11 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 		return
 	}
 
-	ips, err := readIPs(tmpPath, enableTLS)
+	if fallbackPort <= 0 {
+		session.sendWSMessage("error", "备用端口必须为 1-65535")
+		return
+	}
+	ips, err := readIPsWithFallbackPort(tmpPath, fallbackPort)
 	if err != nil {
 		session.sendWSMessage("error", "解析上传文件失败: "+err.Error())
 		return
@@ -459,7 +469,6 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 		session.sendWSMessage("error", "延迟结果上限必须是非 0 正整数")
 		return
 	}
-
 	if resultLimit > 0 {
 		session.sendWSMessage("log", fmt.Sprintf("开始扫描：%d 条记录，目标上限=%d", len(ips), resultLimit))
 	} else {
@@ -494,7 +503,7 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 		default:
 		}
 
-		res, failure := scanNSBEntry(ctx, item, enableTLS, delay, targetDC, idx)
+		res, failure := scanNSBEntry(ctx, item, fallbackPort, enableTLS, delay, targetDC, idx)
 		if debugMode && failure != nil {
 			failMutex.Lock()
 			failures = append(failures, *failure)
