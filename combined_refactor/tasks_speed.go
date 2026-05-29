@@ -285,15 +285,26 @@ func runOfficialSpeedBatch(ctx context.Context, session *appSession, port int, c
 			session.testResults[idx].Speed = speed
 		}
 	}
+	totalQualified := countOfficialQualifiedResults(session.testResults, speedMin)
 	session.testMutex.Unlock()
 	if ctx.Err() != nil {
 		session.sendWSMessage("log", "官方批量测速已终止")
 	} else if rateLimited {
-		session.sendWSMessage("log", fmt.Sprintf("官方批量测速已因速率限制停止，达标 %d/%d", len(qualified), speedLimit))
+		session.sendWSMessage("log", fmt.Sprintf("官方批量测速已因速率限制停止，达标 %d/%d，总达标 %d", len(qualified), speedLimit, totalQualified))
 	} else {
-		session.sendWSMessage("log", fmt.Sprintf("官方批量测速完成，达标 %d/%d", len(qualified), speedLimit))
+		session.sendWSMessage("log", fmt.Sprintf("官方批量测速完成，达标 %d/%d，总达标 %d", len(qualified), speedLimit, totalQualified))
 	}
 	if ctx.Err() == nil {
-		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": len(qualified), "limit": speedLimit, "rateLimited": rateLimited})
+		session.sendWSMessage("official_speed_complete", map[string]interface{}{"qualified": len(qualified), "totalQualified": totalQualified, "limit": speedLimit, "rateLimited": rateLimited})
 	}
+}
+
+func countOfficialQualifiedResults(results []TestResult, speedMin float64) int {
+	count := 0
+	for _, result := range results {
+		if speed, ok := parseSpeedMBForSort(result.Speed); ok && speed >= speedMin {
+			count++
+		}
+	}
+	return count
 }

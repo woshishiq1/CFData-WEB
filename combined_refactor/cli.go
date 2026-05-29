@@ -19,32 +19,33 @@ import (
 )
 
 type cliConfig struct {
-	enabled        bool
-	configResolved bool
-	mode           string
-	ipType         int
-	threads        int
-	port           int
-	delay          int
-	resultLimit    int
-	dc             string
-	file           string
-	sourceURL      string
-	outFile        string
-	speedTest      int
-	speedLimit     int
-	speedMin       float64
-	enableTLS      bool
-	compactNSB     bool
-	nsbIPType      string
-	nsbQualified   bool
-	nsbDC          string
-	nsbSpeedMin    float64
-	nsbSpeedLimit  int
-	showProgress   bool
-	noColor        bool
-	compactIPv4    bool
-	export         cliExportConfig
+	enabled         bool
+	configResolved  bool
+	mode            string
+	ipType          int
+	threads         int
+	port            int
+	delay           int
+	resultLimit     int
+	dc              string
+	file            string
+	sourceURL       string
+	outFile         string
+	nsbFallbackPort int
+	speedTest       int
+	speedLimit      int
+	speedMin        float64
+	enableTLS       bool
+	compactNSB      bool
+	nsbIPType       string
+	nsbQualified    bool
+	nsbDC           string
+	nsbSpeedMin     float64
+	nsbSpeedLimit   int
+	showProgress    bool
+	noColor         bool
+	compactIPv4     bool
+	export          cliExportConfig
 }
 
 type cliExportConfig struct {
@@ -64,44 +65,45 @@ type cliExportConfig struct {
 }
 
 type cliFileConfig struct {
-	CLI           bool    `json:"cli"`
-	Mode          string  `json:"mode"`
-	IPType        int     `json:"iptype"`
-	Threads       int     `json:"threads"`
-	Out           string  `json:"out"`
-	SpeedTest     int     `json:"speedtest"`
-	Progress      bool    `json:"progress"`
-	NoColor       bool    `json:"nocolor"`
-	URL           string  `json:"url"`
-	DNS           string  `json:"dns"`
-	Debug         any     `json:"debug"`
-	CompactIPv4   bool    `json:"compactipv4"`
-	TestPort      int     `json:"testport"`
-	Delay         int     `json:"delay"`
-	DC            string  `json:"dc"`
-	SpeedLimit    int     `json:"speedlimit"`
-	SpeedMin      float64 `json:"speedmin"`
-	File          string  `json:"file"`
-	SourceURL     string  `json:"sourceurl"`
-	NSBDC         string  `json:"nsbdc"`
-	NSBIPType     string  `json:"nsbiptype"`
-	NSBQualified  bool    `json:"nsbqualified"`
-	TLS           bool    `json:"tls"`
-	Compact       bool    `json:"compact"`
-	ResultLimit   int     `json:"resultlimit"`
-	NSBSpeedMin   float64 `json:"nsbspeedmin"`
-	NSBSpeedLimit int     `json:"nsbspeedlimit"`
-	Format        string  `json:"format"`
-	Fields        string  `json:"fields"`
-	Custom        string  `json:"custom"`
-	GitHub        bool    `json:"github"`
-	GHRepo        string  `json:"ghrepo"`
-	GHBranch      string  `json:"ghbranch"`
-	GHPath        string  `json:"ghpath"`
-	GHMessage     string  `json:"ghmessage"`
-	GHToken       string  `json:"ghtoken"`
-	GHTokenFile   string  `json:"ghtokenfile"`
-	GHUpload      string  `json:"ghupload"`
+	CLI             bool    `json:"cli"`
+	Mode            string  `json:"mode"`
+	IPType          int     `json:"iptype"`
+	Threads         int     `json:"threads"`
+	Out             string  `json:"out"`
+	SpeedTest       int     `json:"speedtest"`
+	Progress        bool    `json:"progress"`
+	NoColor         bool    `json:"nocolor"`
+	URL             string  `json:"url"`
+	DNS             string  `json:"dns"`
+	Debug           any     `json:"debug"`
+	CompactIPv4     bool    `json:"compactipv4"`
+	TestPort        int     `json:"testport"`
+	Delay           int     `json:"delay"`
+	DC              string  `json:"dc"`
+	SpeedLimit      int     `json:"speedlimit"`
+	SpeedMin        float64 `json:"speedmin"`
+	File            string  `json:"file"`
+	SourceURL       string  `json:"sourceurl"`
+	NSBFallbackPort int     `json:"nsbfallbackport"`
+	NSBDC           string  `json:"nsbdc"`
+	NSBIPType       string  `json:"nsbiptype"`
+	NSBQualified    bool    `json:"nsbqualified"`
+	TLS             bool    `json:"tls"`
+	Compact         bool    `json:"compact"`
+	ResultLimit     int     `json:"resultlimit"`
+	NSBSpeedMin     float64 `json:"nsbspeedmin"`
+	NSBSpeedLimit   int     `json:"nsbspeedlimit"`
+	Format          string  `json:"format"`
+	Fields          string  `json:"fields"`
+	Custom          string  `json:"custom"`
+	GitHub          bool    `json:"github"`
+	GHRepo          string  `json:"ghrepo"`
+	GHBranch        string  `json:"ghbranch"`
+	GHPath          string  `json:"ghpath"`
+	GHMessage       string  `json:"ghmessage"`
+	GHToken         string  `json:"ghtoken"`
+	GHTokenFile     string  `json:"ghtokenfile"`
+	GHUpload        string  `json:"ghupload"`
 }
 
 type cliResultRow map[string]string
@@ -170,7 +172,7 @@ var (
 		{name: "out", description: "输出文件名", defaultValue: "ip.csv"},
 		{name: "progress", description: "是否输出进度日志", defaultValue: "true"},
 		{name: "nocolor", description: "禁用颜色输出（cmd 等不支持 ANSI 的终端可开启避免乱码）", defaultValue: "false"},
-		{name: "url", description: "测速下载地址；auto 表示从内置地址池随机选择", defaultValue: autoSpeedURLValue},
+		{name: "url", description: "测速下载地址；auto 表示由后端自动选择内置测速源", defaultValue: autoSpeedURLValue},
 		{name: "dns", description: "自定义 DNS 服务器，例如 1.1.1.1 或 223.5.5.5,8.8.8.8；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS", defaultValue: defaultDNSServers},
 		{name: "debug", description: "调试输出等级：error、all；true 等同 error", defaultValue: "false"},
 		{name: "compactipv4", description: "精简本地 IPv4 地址库：按 /24 子网测 TCP:80 连通性并覆盖 ips-v4.txt", defaultValue: "false"},
@@ -225,6 +227,7 @@ func registerCLIFlags() *cliConfig {
 	flag.StringVar(&cfg.dc, "dc", "", "官方模式指定数据中心，不填则自动选择最低延迟数据中心")
 	flag.StringVar(&cfg.file, "file", "", "非标模式输入文件路径")
 	flag.StringVar(&cfg.sourceURL, "sourceurl", "", "非标模式网络输入 URL；与 -file 同时提供时优先使用 -file")
+	flag.IntVar(&cfg.nsbFallbackPort, "nsbfallbackport", 0, "非标输入缺省端口；不填时随 TLS 自动使用 443/80")
 	flag.StringVar(&cfg.nsbIPType, "nsbiptype", "all", "非标模式最终导出 IP 类型筛选：all、ipv4 或 ipv6")
 	flag.BoolVar(&cfg.nsbQualified, "nsbqualified", true, "非标模式只导出测速合格结果")
 	flag.StringVar(&cfg.nsbDC, "nsbdc", "", "非标模式指定结果数据中心")
@@ -260,6 +263,7 @@ func runCLI(cfg *cliConfig) error {
 			return err
 		}
 	}
+	applyCLISpeedDefault()
 	printCLIConfig(cfg)
 
 	if !skipGeoCheck {
@@ -289,6 +293,20 @@ func runCLI(cfg *cliConfig) error {
 	default:
 		return fmt.Errorf("不支持的 -mode: %s（仅支持 official 或 nsb）", cfg.mode)
 	}
+}
+
+func applyCLISpeedDefault() {
+	if !isAutoSpeedURL(speedTestURL) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	_, info, err := resolveStartupSpeedTestURL(ctx, speedTestURL)
+	cancel()
+	if err != nil {
+		recordDebugError("speed_isp_check", err.Error())
+		return
+	}
+	recordDebugByLevel("all", "speed_isp_check", fmt.Sprintf("cli asn=%d org=%s mobile=%v selected=%s", info.ASN, info.ASOrganization, isChinaMobileISP(info), currentAutoSpeedURLDefault()))
 }
 
 func prepareCLIConfig(cfg *cliConfig) error {
@@ -367,6 +385,9 @@ func resolveCLIExportConfig(cfg *cliConfig) error {
 	merged := defaultCLIExportConfig()
 	mergeCLIExportConfig(&merged, envCfg, false)
 	applyCLIFileConfig(cfg, fileCfg, provided)
+	if !provided["nsbfallbackport"] && strings.TrimSpace(os.Getenv("CFDATA_NSBFALLBACKPORT")) == "" && fileCfg.NSBFallbackPort <= 0 {
+		cfg.nsbFallbackPort = defaultNSBPort(cfg.enableTLS)
+	}
 	mergeCLIExportConfig(&merged, fileCfg.Export(), false)
 	mergeCLIExportConfig(&merged, cfg.export, true, provided)
 	merged.ConfigFile = configPath
@@ -452,6 +473,7 @@ func applyCLIEnvConfig(cfg *cliConfig, provided map[string]bool) {
 	setFloat("speedmin", "CFDATA_SPEEDMIN", &cfg.speedMin)
 	setString("file", "CFDATA_FILE", &cfg.file)
 	setString("sourceurl", "CFDATA_SOURCEURL", &cfg.sourceURL)
+	setInt("nsbfallbackport", "CFDATA_NSBFALLBACKPORT", &cfg.nsbFallbackPort)
 	setString("nsbiptype", "CFDATA_NSBIPTYPE", &cfg.nsbIPType)
 	setBool("nsbqualified", "CFDATA_NSBQUALIFIED", &cfg.nsbQualified)
 	setString("nsbdc", "CFDATA_NSBDC", &cfg.nsbDC)
@@ -467,7 +489,7 @@ func defaultCLIExportConfig() cliExportConfig {
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
+	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
@@ -637,7 +659,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "speedtest", Description: "非标测速线程数；表示同时测速的 IP 数量，0 表示不测速", Default: "0"},
 		{Name: "progress", Description: "输出进度日志", Default: "true", Options: []string{"true", "false"}},
 		{Name: "nocolor", Description: "禁用 ANSI 颜色输出", Default: "false", Options: []string{"true", "false"}},
-		{Name: "url", Description: "测速下载地址；auto 表示从内置地址池随机选择，也可填写完整 URL 或不含协议前缀的地址", Default: autoSpeedURLValue},
+		{Name: "url", Description: "测速下载地址；auto 表示由后端自动选择内置测速源，也可填写完整 URL 或不含协议前缀的地址", Default: autoSpeedURLValue},
 		{Name: "dns", Description: "自定义 DNS 服务器；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS。用于 IP 库、locations、ASN、GitHub、网络 URL 输入等需要 DNS 的外部请求", Default: defaultDNSServers},
 		{Name: "debug", Description: "调试输出等级；error 记录程序错误和下载/更新/API 异常，all 额外包含测速失败等全部明细", Default: "false", Options: []string{"false", "error", "all", "true"}},
 		{Name: "compactipv4", Description: "精简本地 IPv4 地址库并覆盖 ips-v4.txt", Default: "false", Options: []string{"true", "false"}},
@@ -648,6 +670,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "speedmin", Description: "官方模式测速达标下限，单位 MB/s", Default: "0.1"},
 		{Name: "file", Description: "非标模式输入文件路径", Default: ""},
 		{Name: "sourceurl", Description: "非标模式网络输入 URL；与 file 同时提供时优先使用 file", Default: ""},
+		{Name: "nsbfallbackport", Description: "非标输入缺省端口；不填时随 TLS 自动使用 443/80；显式设置时必须为 1-65535", Default: "自动"},
 		{Name: "nsbiptype", Description: "非标模式最终导出 IP 类型筛选；只影响导出和上传内容", Default: "all", Options: []string{"all", "ipv4", "ipv6"}},
 		{Name: "nsbdc", Description: "非标模式指定结果数据中心；留空不限制", Default: ""},
 		{Name: "tls", Description: "非标模式启用 TLS；缺省端口随 TLS 为 443/80", Default: "true", Options: []string{"true", "false"}},
@@ -726,6 +749,9 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 	setFloat("speedmin", &cfg.speedMin, fileCfg.SpeedMin)
 	setString("file", &cfg.file, fileCfg.File)
 	setString("sourceurl", &cfg.sourceURL, fileCfg.SourceURL)
+	if !provided["nsbfallbackport"] && fileCfg.NSBFallbackPort > 0 {
+		cfg.nsbFallbackPort = fileCfg.NSBFallbackPort
+	}
 	setString("nsbiptype", &cfg.nsbIPType, fileCfg.NSBIPType)
 	setBool("nsbqualified", &cfg.nsbQualified, fileCfg.NSBQualified)
 	setString("nsbdc", &cfg.nsbDC, fileCfg.NSBDC)
@@ -1036,6 +1062,9 @@ func runNSBCLI(cfg *cliConfig) error {
 	if cfg.nsbSpeedMin < 0 {
 		cfg.nsbSpeedMin = 0
 	}
+	if cfg.nsbFallbackPort <= 0 || cfg.nsbFallbackPort > 65535 {
+		return errors.New("-nsbfallbackport 必须为 1-65535")
+	}
 	cfg.nsbIPType = normalizeIPTypeFilter(cfg.nsbIPType)
 	if cfg.nsbIPType == "" {
 		return fmt.Errorf("-nsbiptype 仅支持 all、ipv4 或 ipv6")
@@ -1068,7 +1097,7 @@ func runNSBCLI(cfg *cliConfig) error {
 
 	session := newCLISession(cfg)
 	if err := session.runTaskSync(func(ctx context.Context, session *appSession) {
-		runNSBTask(ctx, session, inputName, content, cfg.outFile, cfg.threads, cfg.speedTest, speedTestURL, cfg.enableTLS, cfg.delay, cfg.resultLimit, cfg.nsbDC, cfg.nsbSpeedMin, cfg.nsbSpeedLimit, cfg.compactNSB)
+		runNSBTask(ctx, session, inputName, content, cfg.outFile, cfg.threads, cfg.nsbFallbackPort, cfg.speedTest, speedTestURL, cfg.enableTLS, cfg.delay, cfg.resultLimit, cfg.nsbDC, cfg.nsbSpeedMin, cfg.nsbSpeedLimit, cfg.compactNSB)
 	}); err != nil {
 		return cliTaskError(err)
 	}

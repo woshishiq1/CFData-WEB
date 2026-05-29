@@ -147,7 +147,7 @@ func main() {
 
 	flag.IntVar(&listenPort, "port", 13335, "服务监听端口")
 	flag.StringVar(&listenHost, "host", "", "服务监听地址；留空监听全部地址，Android APK 建议使用 127.0.0.1")
-	flag.StringVar(&speedTestURL, "url", autoSpeedURLValue, "测速下载地址；auto 表示从内置地址池随机选择")
+	flag.StringVar(&speedTestURL, "url", autoSpeedURLValue, "测速下载地址；auto 表示由后端自动选择内置测速源")
 	flag.BoolVar(&skipGeoCheck, "skipgeo", false, "跳过地区/代理环境验证")
 	flag.StringVar(&customDNSServer, "dns", defaultDNSServers, "自定义 DNS 服务器，例如 223.5.5.5、8.8.8.8:53 或逗号分隔多个；默认系统 DNS 优先、失败回退到该内置 DNS，显式提供时强制使用指定 DNS")
 	flag.Var(debugFlagValue{}, "debug", "开启调试输出等级：error、all；也兼容 true/false，-debug 默认为 error")
@@ -172,6 +172,18 @@ func main() {
 	}
 	speedTestWorkers = cliCfg.speedTest
 	configureHTTPClients()
+	startupSpeedTestURL := speedTestURL
+	if !cliCfg.enabled {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		resolvedSpeedURL, speedISP, err := resolveStartupSpeedTestURL(ctx, speedTestURL)
+		cancel()
+		if err != nil {
+			recordDebugError("speed_isp_check", err.Error())
+		} else {
+			startupSpeedTestURL = resolvedSpeedURL
+			recordDebugByLevel("all", "speed_isp_check", fmt.Sprintf("startup asn=%d org=%s mobile=%v selected=%s", speedISP.ASN, speedISP.ASOrganization, isChinaMobileISP(speedISP), currentAutoSpeedURLDefault()))
+		}
+	}
 	if webSessionMinutes <= 0 {
 		webSessionMinutes = 720
 	}
@@ -223,14 +235,16 @@ func main() {
 	}
 	fmt.Printf("CFData-WEB 版本: %s\n", appVersion)
 	go checkAndPrintUpdate("")
-	fmt.Printf("服务启动于 http://%s:%d\n", displayHost, listenPort)
+	displayURL := fmt.Sprintf("http://%s:%d", displayHost, listenPort)
+	fmt.Printf("服务启动于 %s\n", displayURL)
+	fmt.Printf("服务启动成功，复制 %s 到浏览器打开\n", displayURL)
 	if webUser != "" && webPassword != "" {
 		fmt.Printf("Web 认证已启用，用户名: %s\n", webUser)
 		fmt.Printf("Web 会话有效期: %s 分钟\n", strconv.Itoa(webSessionMinutes))
 	} else if webUser != "" || webPassword != "" {
 		fmt.Println("警告： 需要同时设置 -user 和 -password 才会启用认证")
 	}
-	fmt.Printf("当前测速网址: %s\n", speedTestURL)
+	fmt.Printf("当前测速网址: %s\n", startupSpeedTestURL)
 	if skipGeoCheck {
 		fmt.Println("地区验证: 已跳过")
 	} else {

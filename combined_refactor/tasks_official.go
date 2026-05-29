@@ -245,13 +245,8 @@ func runOfficialTask(ctx context.Context, session *appSession, ipType int, scanM
 			session.sendWSMessage("log", "扫描任务已终止，当前没有可整理的有效 IP。")
 			return
 		}
-		session.sendWSMessage("log", formatOfficialFailureSummary(failureCounts, failureSamples))
 		session.sendWSMessage("error", "扫描结束或被终止，但未发现任何有效IP。")
 		return
-	}
-	session.sendWSMessage("log", fmt.Sprintf("官方扫描统计: 成功=%d，失败=%d", resultsCount, sumFailureCounts(failureCounts)))
-	if len(failureCounts) > 0 {
-		session.sendWSMessage("log", formatOfficialFailureSummary(failureCounts, failureSamples))
 	}
 
 	session.scanMutex.Lock()
@@ -375,13 +370,8 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 		return
 	}
 	if len(results) == 0 {
-		session.sendWSMessage("log", formatFailureSummary("详细测试失败统计", failureCounts, failureSamples))
 		session.sendWSMessage("error", "详细测试完成，但没有任何 IP 通过延迟测试。")
 		return
-	}
-	session.sendWSMessage("log", fmt.Sprintf("详细测试统计: 成功=%d，失败=%d", len(results), sumFailureCounts(failureCounts)))
-	if len(failureCounts) > 0 {
-		session.sendWSMessage("log", formatFailureSummary("详细测试失败统计", failureCounts, failureSamples))
 	}
 
 	sortOfficialTestResults(results)
@@ -391,10 +381,6 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 	session.testMutex.Unlock()
 
 	session.sendWSMessage("test_complete", results)
-}
-
-func formatOfficialFailureSummary(counts map[string]int, samples map[string]string) string {
-	return formatFailureSummary("官方扫描失败统计", counts, samples)
 }
 
 func formatFailureSummary(title string, counts map[string]int, samples map[string]string) string {

@@ -37,7 +37,6 @@
             transition: none !important;
         }
 
-        /* 修改点：新增复制成功/失败提示的样式及动画 */
         .copy-hint {
             position: fixed;
             z-index: 9999;
@@ -614,7 +613,6 @@
             padding: 12px;
             border-bottom: 1px solid var(--border-color);
             text-align: left;
-            /* 修改点：解决非标模式列数过多导致表头/内容多行、竖排异常的问题 */
             white-space: nowrap;
         }
 
@@ -697,15 +695,36 @@
             flex-wrap: wrap;
         }
 
-        .official-test-actions {
+        .official-test-actions,
+        .nsb-scan-actions {
             display: grid;
-            grid-template-columns: auto minmax(92px, auto) minmax(92px, auto) auto;
             align-items: center;
             gap: 10px;
         }
 
+        .official-test-actions {
+            grid-template-columns: auto minmax(92px, auto) minmax(92px, auto) auto auto;
+        }
+
+        .nsb-scan-actions {
+            grid-template-columns: auto auto auto minmax(92px, auto) minmax(92px, auto) auto auto;
+        }
+
+        .nsb-scan-actions.official-scan-actions {
+            grid-template-columns: auto auto;
+        }
+
+        .official-test-actions .action-btn,
+        .official-test-actions .table-filter-select,
+        .nsb-scan-actions .action-btn,
+        .nsb-scan-actions .table-filter-select {
+            white-space: nowrap;
+        }
+
         #btnBatchSpeed,
-        #btnContinueBatchSpeed {
+        #btnContinueBatchSpeed,
+        #btnNSBBatchSpeed,
+        #btnNSBContinueSpeed {
             min-width: 92px;
         }
 
@@ -1065,14 +1084,12 @@
         .upload-status.error {
             color: var(--error-color);
             border-color: var(--error-color);
-            /* 修改点：增加加粗，让失败提示更明显 */
             font-weight: bold;
         }
 
         .upload-status.success {
             color: #059669;
             border-color: #10b981;
-            /* 修改点：增加加粗，让上传中和上传完成提示更醒目 */
             font-weight: bold;
         }
 
@@ -1156,7 +1173,6 @@
 
         @media (max-width: 768px) {
 
-            /* 修改点：针对移动端竖屏，将结果操作弹窗由双列改为单列，修复排版挤压异常 */
             .modal-mask {
                 align-items: flex-start;
                 padding: 10px;
@@ -1260,15 +1276,13 @@
 
             .section-box h3 .table-actions {
                 display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: minmax(0, 1fr);
                 align-items: center;
                 gap: 8px;
                 width: 100%;
             }
 
-            #nsbCompactView {
-                grid-column: 1;
-                grid-row: 1;
+            .section-box h3 .table-actions > * {
                 width: 100%;
             }
 
@@ -1277,13 +1291,11 @@
             }
 
             #nsbTableIPTypeFilter {
-                grid-column: 1;
-                grid-row: 2;
+                width: 100%;
             }
 
             #nsbTableQualifiedFilter {
-                grid-column: 2;
-                grid-row: 2;
+                width: 100%;
             }
 
             #test .section-box h3 .table-actions {
@@ -1291,44 +1303,45 @@
                 grid-template-columns: 1fr;
             }
 
-            #test .section-box h3 .table-actions .official-test-actions {
+            #test .section-box h3 .table-actions .official-test-actions,
+            #scan .section-box h3 .table-actions .nsb-scan-actions {
                 display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                grid-template-rows: auto auto;
+                grid-template-columns: minmax(0, 1fr);
                 gap: 8px;
                 width: 100%;
             }
 
             #officialTestQualifiedFilter {
-                grid-column: 1;
-                grid-row: 1;
                 align-self: stretch;
                 width: 100%;
             }
 
-            #btnBatchSpeed {
-                grid-column: 1;
-                grid-row: 2;
+            #btnScanCopy {
                 width: 100%;
             }
 
-            #btnContinueBatchSpeed {
-                grid-column: 2;
-                grid-row: 2;
+            #btnScanResultAction {
+                width: 100%;
+            }
+
+            #btnTestCopy {
                 width: 100%;
             }
 
             #btnTestResultAction {
-                grid-column: 2;
-                grid-row: 1;
+                width: 100%;
+            }
+
+            #btnNSBBatchSpeed {
+                width: 100%;
+            }
+
+            #btnNSBContinueSpeed {
                 width: 100%;
             }
 
             .section-box h3 .table-actions .export-btn {
-                grid-column: 2;
-                grid-row: 1;
                 align-self: center;
-                width: 100%;
                 white-space: nowrap;
             }
 
@@ -1392,9 +1405,6 @@
             caret-color: auto;
         }
 
-        /* 修改点1：表格文字选择功能（官方+非标模式） */
-        /* 原因：原 body 禁用了 user-select: none，现在仅让表格（含官方两个表格和非标表格）可光标选中复制 */
-        /* 方案：新增规则覆盖 body 设置，仅影响表格内容，其他地方完全不变 */
         table th,
         table td,
         .copy-ip {
@@ -1491,7 +1501,7 @@
                     <input id="officialSpeedMin" type="number" value="0.1" step="0.01" placeholder="默认 0.1MB/s">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏁 结果上限</span>
+                    <span class="label">🏁 测试结果上限</span>
                     <input id="officialSpeedLimit" type="number" value="5" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
@@ -1512,7 +1522,7 @@
                             <option value="auto" selected>自动选择</option>
                             <option value="speed.cloudflare.com/__down?bytes=99999999">Cloudflare</option>
                             <option value="cf.090227.xyz/__down?bytes=99999999">CM提供</option>
-                            <option value="speed.okl.abrdns.com">备用测速</option>
+                            <option value="speed.okl.abrdns.com">移动专属</option>
                             <option value="custom">手动输入</option>
                         </select>
                         <input id="speedTestUrl" type="text" value="自动选择"
@@ -1553,12 +1563,12 @@
                         oninput="syncNSBInputMode('url')">
                 </div>
                 <div class="option-item">
-                    <span class="label">🚀 并发数</span>
-                    <input id="nsbThreads" type="number" value="100" placeholder="默认 100">
+                    <span class="label">🚪 备用端口</span>
+                    <input id="nsbFallbackPort" type="number" value="443" placeholder="关闭 TLS 默认 80，开启 TLS 默认 443">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏢 数据中心</span>
-                    <input id="nsbTargetDC" type="text" value="" placeholder="留空不限制，如 NRT">
+                    <span class="label">🚀 并发数</span>
+                    <input id="nsbThreads" type="number" value="100" placeholder="默认 100">
                 </div>
                 <div class="option-item">
                     <span class="label">⏱️ 延迟阈值 (ms)</span>
@@ -1573,11 +1583,11 @@
                     <input id="nsbSpeedMin" type="number" value="0.1" step="0.01" placeholder="默认 0.1MB/s">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏁 测速上限</span>
+                    <span class="label">🏁 测试结果上限</span>
                     <input id="nsbSpeedLimit" type="number" value="5" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
-                    <span class="label">🧪 开启测速</span>
+                    <span class="label">🧪 开启自动测速</span>
                     <select id="enableSpeedTest" onchange="updateNSBSpeedControls()">
                         <option value="on">开启</option>
                         <option value="off" selected>关闭</option>
@@ -1588,8 +1598,19 @@
                     <input id="nsbSpeedTest" type="number" value="0" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
+                    <span class="label">🏢 数据中心</span>
+                    <input id="nsbTargetDC" type="text" value="" placeholder="留空不限制，如 NRT">
+                </div>
+                <div class="option-item">
+                    <span class="label">🧾 精简表格</span>
+                    <select id="nsbCompactView" onchange="setNSBCompactView(this.value === 'compact')">
+                        <option value="compact" selected>精简表格</option>
+                        <option value="full">完整表格</option>
+                    </select>
+                </div>
+                <div class="option-item">
                     <span class="label">🔗 TLS 模式</span>
-                    <select id="nsbTls">
+                    <select id="nsbTls" onchange="updateNSBFallbackPortDefault()">
                         <option value="on" selected>开启</option>
                         <option value="off">关闭</option>
                     </select>
@@ -1605,7 +1626,7 @@
                             <option value="auto" selected>自动选择</option>
                             <option value="speed.cloudflare.com/__down?bytes=99999999">Cloudflare</option>
                             <option value="cf.090227.xyz/__down?bytes=99999999">CM提供</option>
-                            <option value="speed.okl.abrdns.com">备用测速</option>
+                            <option value="speed.okl.abrdns.com">移动专属</option>
                             <option value="custom">手动输入</option>
                         </select>
                         <input id="nsbSpeedUrl" type="text" value="自动选择"
@@ -1660,21 +1681,22 @@
                 <h3 style="display:flex;justify-content:space-between;align-items:center;">
                     <span>扫描结果 <span class="badge" id="scanCount">0</span></span>
                     <span class="table-actions">
-                        <select id="nsbCompactView" class="table-filter-select" onchange="setNSBCompactView(this.value === 'compact')">
-                            <option value="compact" selected>精简表格</option>
-                            <option value="full">完整表格</option>
-                        </select>
-                        <select id="nsbTableIPTypeFilter" class="table-filter-select" onchange="setNSBTableIPTypeFilter(this.value)">
-                            <option value="all" selected>展示全部类型</option>
-                            <option value="ipv4">仅展示IPV4</option>
-                            <option value="ipv6">仅展示IPV6</option>
-                        </select>
-                        <select id="nsbTableQualifiedFilter" class="table-filter-select" onchange="setNSBTableQualifiedFilter(this.value)">
-                            <option value="all" selected>展示全部结果</option>
-                            <option value="qualified">仅展示合格</option>
-                            <option value="unqualified">仅展示不合格</option>
-                        </select>
-                        <button class="action-btn export-btn" onclick="openResultModal('scan')">📥 结果操作</button>
+                        <span class="nsb-scan-actions" id="nsbScanActions">
+                            <select id="nsbTableIPTypeFilter" class="table-filter-select" onchange="setNSBTableIPTypeFilter(this.value)">
+                                <option value="all" selected>展示全部类型</option>
+                                <option value="ipv4">仅展示IPV4</option>
+                                <option value="ipv6">仅展示IPV6</option>
+                            </select>
+                            <select id="nsbTableQualifiedFilter" class="table-filter-select" onchange="setNSBTableQualifiedFilter(this.value)">
+                                <option value="all" selected>展示全部结果</option>
+                                <option value="qualified">仅展示合格</option>
+                                <option value="unqualified">仅展示不合格</option>
+                            </select>
+                            <button class="action-btn export-btn" id="btnNSBBatchSpeed" onclick="startNSBBatchSpeed(false)" disabled>🚀 一键测速</button>
+                            <button class="action-btn export-btn" id="btnNSBContinueSpeed" onclick="startNSBBatchSpeed(true)" disabled>⏭️ 继续测速</button>
+                            <button class="action-btn export-btn" id="btnScanCopy" onclick="copyDisplayedResults('scan', event)">📋 一键复制</button>
+                            <button class="action-btn export-btn" id="btnScanResultAction" onclick="openResultModal('scan')">📥 结果操作</button>
+                        </span>
                     </span>
                 </h3>
                 <div class="scroll-table" style="max-height:520px;">
@@ -1707,6 +1729,7 @@
                             </select>
                             <button class="action-btn export-btn" id="btnBatchSpeed" onclick="startOfficialBatchSpeed(false)" disabled>🚀 一键测速</button>
                             <button class="action-btn export-btn" id="btnContinueBatchSpeed" onclick="startOfficialBatchSpeed(false, true)" disabled>⏭️ 继续测速</button>
+                            <button class="action-btn export-btn" id="btnTestCopy" onclick="copyDisplayedResults('test', event)">📋 一键复制</button>
                             <button class="action-btn export-btn" id="btnTestResultAction" onclick="openResultModal('test')">📥 结果操作</button>
                         </span>
                     </span>
@@ -1914,6 +1937,8 @@
         let officialAutoSpeedPending = false;
         let officialAutoStage = '';
         let officialBatchSpeedRunning = false;
+        let nsbBatchSpeedRunning = false;
+        let nsbContinueSpeedUnlocked = false;
         let officialTestCompletePending = false;
         let officialSpeedEndedByRateLimit = false;
         let officialContinueSpeedUnlocked = false;
@@ -2081,11 +2106,25 @@
                 if (String(speedTestInput.value).trim() === '0') {
                     speedTestInput.value = '5';
                 }
+                updateNSBSpeedButtons();
                 return;
             }
 
             speedTestInput.value = '0';
             speedTestInput.disabled = true;
+            updateNSBSpeedButtons();
+        }
+
+        function updateNSBFallbackPortDefault() {
+            const portInput = document.getElementById('nsbFallbackPort');
+            const tlsMode = String(document.getElementById('nsbTls')?.value || 'on').toLowerCase();
+            if (!portInput) return;
+            const current = parseInt(portInput.value, 10) || 0;
+            if (tlsMode === 'off' && (current <= 0 || current === 443)) {
+                portInput.value = '80';
+            } else if (tlsMode !== 'off' && (current <= 0 || current === 80)) {
+                portInput.value = '443';
+            }
         }
 
         function applySpeedUrlPreset(targetId, value) {
@@ -2144,6 +2183,20 @@
             const preset = presetId ? document.getElementById(presetId) : null;
             if (preset) preset.value = AUTO_SPEED_URL_VALUE;
             if (presetId) syncSpeedUrlPreset(targetId, presetId);
+        }
+
+        function applySpeedUrlConfig(targetId, presetId, value) {
+            const input = document.getElementById(targetId);
+            const preset = document.getElementById(presetId);
+            if (!input || !preset) return;
+            const resolved = String(value || '').trim();
+            if (!resolved || resolved === AUTO_SPEED_URL_VALUE || resolved === AUTO_SPEED_URL_LABEL) {
+                resetDefaultSpeedUrl(targetId, presetId);
+                return;
+            }
+            input.value = resolved;
+            input.readOnly = false;
+            syncSpeedUrlPreset(targetId, presetId);
         }
 
         function resetAllConfig() {
@@ -2623,12 +2676,14 @@
             officialAutoSpeedPending = false;
             officialAutoStage = '';
             officialBatchSpeedRunning = false;
+            nsbBatchSpeedRunning = false;
             officialTestCompletePending = false;
             officialSpeedEndedByRateLimit = false;
             currentTestingDC = '';
             resetCurrentSpeedButton();
             finishRunningTask('✨ 开始扫描与测试');
             updateBatchSpeedButton();
+            updateNSBSpeedButtons();
             finishCompactIPv4();
             showDCSelection(dcList);
             const status = document.getElementById('currentTestDC');
@@ -2672,9 +2727,12 @@
         }
 
         function updateNSBCompactToggle() {
+            const scanActions = document.getElementById('nsbScanActions');
+            if (scanActions) {
+                scanActions.classList.toggle('official-scan-actions', currentMode !== 'nsb');
+            }
             const compactToggle = document.getElementById('nsbCompactView');
             if (compactToggle) {
-                compactToggle.style.display = currentMode === 'nsb' ? 'inline-block' : 'none';
                 compactToggle.value = nsbCompactView ? 'compact' : 'full';
                 compactToggle.disabled = isTaskRunning;
             }
@@ -2688,6 +2746,46 @@
                 qualifiedFilter.style.display = currentMode === 'nsb' ? 'inline-block' : 'none';
                 qualifiedFilter.value = nsbTableQualifiedFilter;
             }
+            updateNSBSpeedButtons();
+        }
+
+        function getNSBSpeedTargetRows() {
+            if (currentMode !== 'nsb') return [];
+            return getNSBResultObjects()
+                .filter((row) => String(row.ip || '').trim() && String(row.port || '').trim());
+        }
+
+        function updateNSBSpeedButtons() {
+            const btn = document.getElementById('btnNSBBatchSpeed');
+            const continueBtn = document.getElementById('btnNSBContinueSpeed');
+            const visible = currentMode === 'nsb';
+            const rows = visible ? getNSBSpeedTargetRows() : [];
+            const disabled = !visible || isTaskRunning || nsbBatchSpeedRunning || rows.length === 0;
+            if (btn) {
+                btn.style.display = visible ? 'inline-flex' : 'none';
+                btn.disabled = disabled;
+                btn.textContent = nsbBatchSpeedRunning ? '测速中...' : '🚀 一键测速';
+            }
+            if (continueBtn) {
+                continueBtn.style.display = visible ? 'inline-flex' : 'none';
+                continueBtn.disabled = disabled || !nsbContinueSpeedUnlocked || !rows.some((row) => getSpeedStatus(row.speed, isNSBSpeedQualified(row.speed)) === 'untested');
+                continueBtn.textContent = nsbBatchSpeedRunning ? '测速中...' : '⏭️ 继续测速';
+            }
+        }
+
+        function syncNSBSpeedConfigState() {
+            const speedMin = parseFloat(document.getElementById('nsbSpeedMin')?.value) || 0.1;
+            const speedLimit = parseInt(document.getElementById('nsbSpeedLimit')?.value, 10) || 0;
+            const speedTest = parseInt(document.getElementById('nsbSpeedTest')?.value, 10) || 0;
+            const tlsMode = String(document.getElementById('nsbTls')?.value || 'on').toLowerCase();
+            nsbSpeedMinValue = speedMin;
+            return {
+                speedMin,
+                speedLimit,
+                speedTest,
+                speedURL: resolveSpeedTestUrl('nsbSpeedUrl', 'nsbSpeedUrlPreset'),
+                enableTLS: tlsMode !== 'off',
+            };
         }
 
         function setNSBCompactView(enabled) {
@@ -2741,7 +2839,6 @@
             const tbody = document.querySelector('#scanTable tbody');
             const latencyVal = parseFloat(row.LatencyStr);
             const latencyColor = getLatencyColor(latencyVal);
-            // 修改点：为 copyToClipboard 增加 event 参数，以便定位提示文字
             const html = `<tr><td>${renderIPCell(row.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
             tbody.insertAdjacentHTML('beforeend', html);
         }
@@ -2854,6 +2951,7 @@
             });
 
             updateBadge('scanCount', filteredRows.length);
+            updateNSBSpeedButtons();
         }
 
         const NSB_LIVE_HEADERS = ['IP地址', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
@@ -2902,6 +3000,7 @@
                 appendNSBLiveRow(row);
             });
             updateBadge('scanCount', rows.length);
+            updateNSBSpeedButtons();
         }
 
         function renderNSBLiveRowHTML(row) {
@@ -2952,10 +3051,12 @@
                 Object.assign(nsbLiveRows[existingIdx], row);
                 if (!render) {
                     updateNSBLiveBadgeFromData();
+                    updateNSBSpeedButtons();
                     return;
                 }
                 updateNSBLiveRowElement(nsbLiveRows[existingIdx]);
                 updateBadge('scanCount', document.querySelector('#scanTable tbody').children.length);
+                updateNSBSpeedButtons();
                 return;
             }
 
@@ -2963,14 +3064,92 @@
             nsbLiveRows.push(row);
             if (!render) {
                 updateNSBLiveBadgeFromData();
+                updateNSBSpeedButtons();
                 return;
             }
             if (!matchesIPTypeFilter(row.ipType, nsbTableIPTypeFilter) || !matchesQualifiedFilter(row, nsbTableQualifiedFilter)) {
                 updateBadge('scanCount', document.querySelector('#scanTable tbody').children.length);
+                updateNSBSpeedButtons();
                 return;
             }
             appendNSBLiveRow(row);
             updateBadge('scanCount', document.querySelector('#scanTable tbody').children.length);
+            updateNSBSpeedButtons();
+        }
+
+        function updateNSBDisplayedResult(row) {
+            if (!row) return;
+            const ip = String(row.ip || row.IP || '').trim();
+            const port = String(row.port || row.Port || '').trim();
+            if (!ip || !port) return;
+            const headerSource = nsbHeaders.length ? nsbHeaders : NSB_LIVE_HEADERS;
+            const normalizedHeaders = headerSource.map(normalizeNSBHeader);
+            const key = `${ip}:${port}`;
+            const patch = {
+                IP地址: ip,
+                端口号: port,
+                TLS: row.tls ?? row.TLS ?? '-',
+                丢包率: row.lossRate || row.LossRate || '0%',
+                网络延迟: row.latency || row.Latency || '-',
+                下载速度: row.speed || row.Speed || '-',
+                出站IP: row.outboundIP || row.OutboundIP || '-',
+                IP类型: row.ipType || row.IPType || '-',
+                数据中心: row.dc || row.DC || '-',
+                源IP位置: row.loc || row.Loc || '-',
+                地区: row.region || row.Region || '-',
+                城市: row.city || row.City || '-',
+                ASN号码: row.asnNumber || row.ASNNumber || '-',
+                ASN组织: row.asnOrg || row.ASNOrg || '-',
+                访问协议: row.visitScheme || row.VisitScheme || '-',
+                TLS版本: row.tlsVersion || row.TLSVersion || '-',
+                SNI: row.sni || row.SNI || '-',
+                HTTP版本: row.httpVersion || row.HTTPVersion || '-',
+                WARP: row.warp || row.Warp || '-',
+                Gateway: row.gateway || row.Gateway || '-',
+                RBI: row.rbi || row.RBI || '-',
+                密钥交换: row.kex || row.Kex || '-',
+                时间戳: row.timestamp || row.Timestamp || '-',
+            };
+            if (nsbRows.length) {
+                const idx = nsbRows.findIndex((r) => String(r[normalizedHeaders.indexOf('IP地址')] ?? '').trim() === ip && String(r[normalizedHeaders.indexOf('端口号')] ?? '').trim() === port);
+                if (idx >= 0) {
+                    const updated = nsbRows[idx].slice();
+                    normalizedHeaders.forEach((header, hIdx) => {
+                        if (patch[header] !== undefined && hIdx < updated.length) updated[hIdx] = patch[header];
+                    });
+                    nsbRows[idx] = updated;
+                    renderScanRowsCSV(nsbHeaders, nsbRows);
+                }
+                return;
+            }
+            const liveIdx = nsbLiveIndex[key];
+            if (liveIdx === undefined) return;
+            Object.assign(nsbLiveRows[liveIdx], {
+                ip,
+                port,
+                tls: patch.TLS,
+                lossRate: patch['丢包率'],
+                latency: patch['网络延迟'],
+                speed: patch['下载速度'],
+                outboundIP: patch['出站IP'],
+                ipType: patch['IP类型'],
+                dc: patch['数据中心'],
+                loc: patch['源IP位置'],
+                region: patch['地区'],
+                city: patch['城市'],
+                asnNumber: patch['ASN号码'],
+                asnOrg: patch['ASN组织'],
+                visitScheme: patch['访问协议'],
+                tlsVersion: patch['TLS版本'],
+                sni: patch.SNI,
+                httpVersion: patch['HTTP版本'],
+                warp: patch.WARP,
+                gateway: patch.Gateway,
+                rbi: patch.RBI,
+                kex: patch['密钥交换'],
+                timestamp: patch['时间戳'],
+            });
+            updateNSBLiveRowElement(nsbLiveRows[liveIdx]);
         }
 
         function normalizeIPTypeFilter(value) {
@@ -3300,6 +3479,56 @@
             return true;
         }
 
+        function startNSBBatchSpeed(continued = false) {
+            if (requireProxyWarning(() => startNSBBatchSpeed(continued))) return false;
+            if (nsbBatchSpeedRunning) return false;
+            if (currentMode !== 'nsb') {
+                alert('请切换到非标模式后再测速');
+                return false;
+            }
+            const enableSpeedTest = document.getElementById('enableSpeedTest');
+            if (enableSpeedTest && String(enableSpeedTest.value || 'off').toLowerCase() !== 'on') {
+                enableSpeedTest.value = 'on';
+                updateNSBSpeedControls();
+            }
+            const rows = getNSBSpeedTargetRows();
+            if (!rows.length) {
+                alert('当前没有可测速的非标结果');
+                return false;
+            }
+            const cfg = syncNSBSpeedConfigState();
+            if (cfg.speedTest <= 0) {
+                alert('测速线程必须大于 0');
+                return false;
+            }
+            if (cfg.speedLimit <= 0) {
+                alert('测速结果上限必须大于 0');
+                return false;
+            }
+            nsbBatchSpeedRunning = true;
+            isTaskRunning = true;
+            isStoppingTask = false;
+            runningTaskLabel = continued ? '非标继续测速' : '非标一键测速';
+            runningTaskMode = 'nsb';
+            runningTaskTab = 'scan';
+            if (!continued) {
+                rows.forEach((row) => { row.speed = ''; });
+            }
+            setNSBTableQualifiedFilter('all');
+            setStartLoading(getRunningButtonText());
+            resetProgress();
+            progressBox.style.display = 'block';
+            updateNSBSpeedButtons();
+            if (!wsSend({ type: 'start_nsb_speed_batch', data: { results: rows, speedTest: cfg.speedTest, speedURL: cfg.speedURL, enableTLS: cfg.enableTLS, speedMin: cfg.speedMin, speedLimit: cfg.speedLimit, skipTested: continued, compact: nsbCompactView } })) {
+                nsbBatchSpeedRunning = false;
+                finishRunningTask('✨ 开始扫描与测试');
+                updateNSBSpeedButtons();
+                alert('连接未就绪，请等待重连后再试');
+                return false;
+            }
+            return true;
+        }
+
         function resetCurrentSpeedButton() {
             if (!currentSpeedTestingIP) return;
             const ip = currentSpeedTestingIP;
@@ -3319,38 +3548,29 @@
             updateBatchSpeedButton();
         }
 
-        // 修改点3：增强 copyToClipboard 函数（解决复制不生效 + 第一次可用后面失效的问题）
-        // 原因：原 navigator.clipboard.writeText 在某些浏览器环境（http、非localhost、重载后、权限变化）会失败，导致复制完全不生效
-        // 方案：保留原有提示动画、颜色、log完全不变，仅增加 fallback（execCommand），优先现代API，失败自动切换传统方法
         function copyToClipboard(text, event) {
             const showHint = (msg, color) => {
                 const hint = document.createElement('span');
                 hint.className = 'copy-hint';
                 hint.style.color = color;
                 hint.textContent = msg;
-                // 根据点击位置定位提示文字，偏移 20px 避免遮挡鼠标
                 hint.style.left = (event.clientX - 20) + 'px';
                 hint.style.top = (event.clientY - 20) + 'px';
                 document.body.appendChild(hint);
-                // 动画结束后移除元素
                 setTimeout(() => hint.remove(), 800);
             };
 
-            // 优先使用现代 Clipboard API
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(text).then(() => {
                     showHint('复制成功！', '#10b981');
                     log('已复制: ' + text);
                 }).catch(() => {
-                    // 失败时自动 fallback
                     fallbackCopy();
                 });
             } else {
-                // 不支持 Clipboard API 时直接使用 fallback
                 fallbackCopy();
             }
 
-            // 传统 fallback 方法（兼容性最高）
             function fallbackCopy() {
                 const textarea = document.createElement('textarea');
                 textarea.value = text;
@@ -3378,7 +3598,7 @@
         }
 
         function startTask() {
-            if (isTaskRunning || officialBatchSpeedRunning) {
+            if (isTaskRunning || officialBatchSpeedRunning || nsbBatchSpeedRunning) {
                 if (confirm(getStopConfirmText())) {
                     if (!wsSend({ type: 'stop_task', data: {} })) {
                         alert('连接未就绪，无法发送停止命令');
@@ -3477,12 +3697,14 @@
             }
 
             const maxThreads = parseInt(document.getElementById('nsbThreads').value) || 100;
+            const fallbackPort = parseInt(document.getElementById('nsbFallbackPort').value) || 0;
             const speedEnabled = String(document.getElementById('enableSpeedTest').value || 'off').toLowerCase() === 'on';
             const speedTestInput = parseInt(document.getElementById('nsbSpeedTest').value) || 0;
             const speedURL = resolveSpeedTestUrl('nsbSpeedUrl', 'nsbSpeedUrlPreset');
             const outFile = document.getElementById('nsbOutFile').value.trim() || 'ip.csv';
             const speedTest = speedEnabled ? speedTestInput : 0;
             nsbSpeedEnabledForResults = speedTest > 0 && (parseInt(document.getElementById('nsbSpeedLimit').value) || 0) > 0;
+            nsbContinueSpeedUnlocked = false;
             const tlsMode = String(document.getElementById('nsbTls').value || 'on').toLowerCase();
             const enableTLS = tlsMode !== 'off';
             const delay = parseInt(document.getElementById('nsbDelay').value) || 0;
@@ -3502,6 +3724,10 @@
             }
             if (resultLimit <= 0) {
                 alert('延迟结果上限必须填写非 0 正整数');
+                return;
+            }
+            if (fallbackPort <= 0 || fallbackPort > 65535) {
+                alert('备用端口必须为 1-65535');
                 return;
             }
 
@@ -3535,6 +3761,7 @@
                     sourceURL: hasURL ? sourceURL : '',
                     outFile,
                     maxThreads,
+                    fallbackPort,
                     speedTest,
                     speedURL,
                     enableTLS,
@@ -3965,6 +4192,16 @@
             return rows.filter((row) => matchesIPTypeFilter(getOfficialIPType(row), filter) && matchesOfficialQualifiedFilter(row, qualified));
         }
 
+        function getDisplayedResultRows(mode) {
+            if (currentMode === 'nsb') {
+                return getNSBResultObjects().filter((row) => matchesIPTypeFilter(row.ipType, nsbTableIPTypeFilter) && matchesQualifiedFilter(row, nsbTableQualifiedFilter));
+            }
+            if (mode === 'test') {
+                return getFilteredOfficialTestData().map(testResultToObject);
+            }
+            return getFilteredOfficialScanData().map(scanResultToObject);
+        }
+
         function scanResultToObject(r) {
             return { ip: r.IP || '', port: String(r.Port ?? ''), ipport: `${r.IP || ''}:${r.Port ?? ''}`, dc: r.DataCenter || '', region: r.Region || '', city: r.City || '', latency: r.LatencyStr || '' };
         }
@@ -4008,6 +4245,12 @@
             if (!rows.length) throw new Error('暂无可操作结果');
             const fields = resultFieldOrder.length ? resultFieldOrder : getDefaultResultFieldOrder(format);
             return buildResultContent(format, rows, fields);
+        }
+
+        function buildDisplayedResultContent(mode) {
+            const rows = getDisplayedResultRows(mode).slice(0, 10);
+            if (!rows.length) throw new Error('当前展示表格暂无可复制结果');
+            return buildResultContent('txt', rows, getDefaultResultFieldOrderFor(mode, 'txt'));
         }
 
         function buildResultContent(format, rows, fields) {
@@ -4113,6 +4356,17 @@
             }
             const name = document.getElementById('resultFileName').value.trim() || 'cfdata-results';
             downloadFile(content, name, format);
+        }
+
+        function copyDisplayedResults(mode, event) {
+            let content;
+            try {
+                content = buildDisplayedResultContent(mode);
+            } catch (err) {
+                alert(err.message || '当前展示表格暂无可复制结果');
+                return;
+            }
+            copyToClipboard(content, event);
         }
 
         async function uploadSelectedResultsToGitHub() {
@@ -4222,10 +4476,10 @@
                     proxyWarningBypassed = false;
                     if (webDebugMode) log('调试模式已开启，错误将输出到程序 log');
                     if (proxyWarningRequired) log(`代理检测警告：当前网络标签 ${cfCountry}`);
-                    document.getElementById('speedTestUrl').value = AUTO_SPEED_URL_LABEL;
-                    document.getElementById('nsbSpeedUrl').value = AUTO_SPEED_URL_LABEL;
-                    syncSpeedUrlPreset('speedTestUrl', 'officialSpeedUrlPreset');
-                    syncSpeedUrlPreset('nsbSpeedUrl', 'nsbSpeedUrlPreset');
+                    const speedDefault = msg.data.speedTestDefault || msg.data.speedTestURL || AUTO_SPEED_URL_VALUE;
+                    defaultSpeedTestUrl = speedDefault || defaultSpeedTestUrl;
+                    applySpeedUrlConfig('speedTestUrl', 'officialSpeedUrlPreset', speedDefault);
+                    applySpeedUrlConfig('nsbSpeedUrl', 'nsbSpeedUrlPreset', speedDefault);
                     renderVersionInfo(msg.data || {});
                     break;
                 case 'version_info':
@@ -4303,7 +4557,7 @@
                     officialAutoStage = '';
                     officialBatchSpeedRunning = false;
                     officialSpeedEndedByRateLimit = !!msg.data?.rateLimited;
-                    officialSpeedEnabledForResults = (msg.data?.qualified || 0) > 0;
+                    officialSpeedEnabledForResults = ((msg.data?.totalQualified ?? msg.data?.qualified) || 0) > 0;
                     officialContinueSpeedUnlocked = true;
                     finishRunningTask('✨ 开始扫描与测试');
                     updateBatchSpeedButton();
@@ -4358,7 +4612,26 @@
                     break;
                 case 'nsb_scan_result':
                     if (isStoppingTask) break;
-                    addNSBLiveResult(msg.data || {}, currentMode === 'nsb');
+                    if (nsbBatchSpeedRunning) {
+                        updateNSBDisplayedResult(msg.data || {});
+                    } else {
+                        addNSBLiveResult(msg.data || {}, currentMode === 'nsb');
+                    }
+                    break;
+                case 'nsb_speed_complete':
+                    if (isStoppingTask) {
+                        resetStoppedTaskUI('已手动终止');
+                        log('任务已手动终止');
+                        break;
+                    }
+                    nsbBatchSpeedRunning = false;
+                    nsbSpeedEnabledForResults = ((msg.data?.totalQualified ?? msg.data?.qualified) || 0) > 0;
+                    nsbContinueSpeedUnlocked = true;
+                    finishRunningTask('✨ 开始扫描与测试');
+                    updateNSBSpeedButtons();
+                    if (nsbSpeedEnabledForResults) setNSBTableQualifiedFilter('qualified');
+                    updateProgress(msg.data?.qualified || 0, msg.data?.limit || 1, '测速完成');
+                    autoUploadNSBResults();
                     break;
                 case 'nsb_csv_complete':
                     const wasStoppingNSB = isStoppingTask;
@@ -4369,6 +4642,7 @@
                     nsbLiveRows = [];
                     nsbLiveIndex = {};
                     nsbLiveRowElements = {};
+                    nsbContinueSpeedUnlocked = nsbSpeedEnabledForResults;
                     if (nsbSpeedEnabledForResults) {
                         setNSBTableQualifiedFilter((msg.data.qualifiedCount || 0) > 0 ? 'qualified' : 'all');
                     }
@@ -4377,9 +4651,6 @@
                     const nsbMessage = msg.data.message || '测试完成';
                     updateProgress(nsbRows.length, Math.max(nsbRows.length, 1), nsbStatus === 'failed' ? '任务失败' : '完成');
                     progressBar.style.background = nsbStatus === 'failed' ? 'var(--error-color)' : (nsbStatus === 'partial' ? 'var(--warning-color)' : 'linear-gradient(to right, #10b981, #34d399)');
-                    // 修改点4：修复非标模式完成后进度条绿色闪烁问题
-                    // 原因：虽然背景已改为绿色，但 animation: stripe 1s linear infinite 仍在生效，导致条纹持续闪烁、前进、消失重复
-                    // 方案：立即停止动画（animation: none），其他代码完全不变
                     progressBar.style.animation = 'none';
                     if (nsbStatus === 'failed') {
                         progressBar.textContent = '任务失败';
@@ -4412,15 +4683,19 @@
                             isTaskRunning = false;
                             showDCSelection(dcList);
                             window.setTimeout(maybeStartOfficialAutoTest, 300);
-                        } else if (officialBatchSpeedRunning) {
-                            officialBatchSpeedRunning = false;
-                            finishRunningTask('✨ 开始扫描与测试');
-                        }
-                        resetCurrentSpeedButton();
-                        updateBatchSpeedButton();
-                        log('错误: ' + msg.data);
-                        break;
-                    }
+                } else if (officialBatchSpeedRunning) {
+                    officialBatchSpeedRunning = false;
+                    finishRunningTask('✨ 开始扫描与测试');
+                } else if (nsbBatchSpeedRunning) {
+                    nsbBatchSpeedRunning = false;
+                    finishRunningTask('✨ 开始扫描与测试');
+                }
+                resetCurrentSpeedButton();
+                updateBatchSpeedButton();
+                updateNSBSpeedButtons();
+                log('错误: ' + msg.data);
+                break;
+            }
                     if (String(msg.data || '').includes('上传 GitHub')) {
                         setGitHubUploadStatus(String(msg.data), 'error');
                     }
@@ -4430,6 +4705,7 @@
                         officialAutoSpeedPending = false;
                         officialAutoStage = '';
                         officialBatchSpeedRunning = false;
+                        nsbBatchSpeedRunning = false;
                         officialTestCompletePending = false;
                         officialSpeedEndedByRateLimit = false;
                         if (currentSpeedTestingIP) {
@@ -4437,6 +4713,7 @@
                         }
                         finishRunningTask('✨ 开始扫描与测试');
                         updateBatchSpeedButton();
+                        updateNSBSpeedButtons();
                         finishCompactIPv4();
                         progressBar.style.background = 'var(--error-color)';
                         progressBar.style.width = '100%';

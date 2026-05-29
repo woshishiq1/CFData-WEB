@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -12,7 +13,7 @@ import (
 	"time"
 )
 
-var upstreamHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var upstreamHTTPClient = &http.Client{Timeout: 20 * time.Second}
 
 func configureHTTPClients() {
 	initCustomResolver()
@@ -151,7 +152,11 @@ func getIPListContent(filename, apiURL string) (string, error) {
 }
 
 func getURLContent(targetURL string) (string, error) {
-	data, err := getURLBytes(targetURL)
+	return getURLContentWithContext(context.Background(), targetURL)
+}
+
+func getURLContentWithContext(ctx context.Context, targetURL string) (string, error) {
+	data, err := getURLBytesWithContext(ctx, targetURL)
 	if err != nil {
 		return "", err
 	}
@@ -159,7 +164,15 @@ func getURLContent(targetURL string) (string, error) {
 }
 
 func getURLBytes(targetURL string) ([]byte, error) {
-	resp, err := upstreamHTTPClient.Get(targetURL)
+	return getURLBytesWithContext(context.Background(), targetURL)
+}
+
+func getURLBytesWithContext(ctx context.Context, targetURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := upstreamHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
