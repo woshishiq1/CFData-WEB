@@ -538,6 +538,11 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	if resultLimit > 0 && len(nsbResults) > resultLimit {
 		nsbResults = nsbResults[:resultLimit]
 	}
+	sortedScanRows := make([]nsbScanMessage, 0, len(nsbResults))
+	for i := range nsbResults {
+		sortedScanRows = append(sortedScanRows, nsbResults[i].toNSBLiveMessage("", compact))
+	}
+	session.sendWSMessage("nsb_scan_sorted", sortedScanRows)
 
 	completionStatus := "complete"
 	completionMessage := "测试完成"

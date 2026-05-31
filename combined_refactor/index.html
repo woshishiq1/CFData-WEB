@@ -1666,6 +1666,7 @@
                         <thead>
                             <tr>
                                 <th>数据中心</th>
+                                <th>落地区域</th>
                                 <th>城市</th>
                                 <th>IP数量</th>
                                 <th>最低延迟</th>
@@ -1705,6 +1706,7 @@
                             <tr>
                                 <th>IP</th>
                                 <th>数据中心</th>
+                                <th>落地区域</th>
                                 <th>地区</th>
                                 <th>城市</th>
                                 <th>延迟</th>
@@ -1799,8 +1801,8 @@
                     <div class="modal-field" id="resultQualifiedFilterField">
                         <label>导出合格结果</label>
                         <select id="resultQualifiedFilter" onchange="updateResultPreview()">
-                            <option value="all">导出全部结果</option>
-                            <option value="qualified" selected>仅导出合格</option>
+                            <option value="all" selected>导出全部结果</option>
+                            <option value="qualified">仅导出合格</option>
                             <option value="unqualified">仅导出不合格</option>
                         </select>
                     </div>
@@ -2718,7 +2720,7 @@
             tbody.innerHTML = '';
 
             if (mode === 'official') {
-                thead.innerHTML = '<tr><th>IP</th><th>端口</th><th>数据中心</th><th>地区</th><th>城市</th><th>延迟</th></tr>';
+                thead.innerHTML = '<tr><th>IP</th><th>端口</th><th>数据中心</th><th>落地区域</th><th>地区</th><th>城市</th><th>延迟</th></tr>';
             } else {
                 const headers = getVisibleNSBHeaders();
                 const headerRow = headers.map(h => `<th>${h}</th>`).join('');
@@ -2839,7 +2841,7 @@
             const tbody = document.querySelector('#scanTable tbody');
             const latencyVal = parseFloat(row.LatencyStr);
             const latencyColor = getLatencyColor(latencyVal);
-            const html = `<tr><td>${renderIPCell(row.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
+            const html = `<tr><td>${renderIPCell(row.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.DCCountry || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
             tbody.insertAdjacentHTML('beforeend', html);
         }
 
@@ -3253,7 +3255,7 @@
                 const isTesting = currentTestingDC === dc.DataCenter;
                 const latencyColor = getLatencyColor(dc.MinLatency);
                 const btn = isTesting ? `<button class="action-btn" disabled>测试中...</button>` : (isTested ? `<button class="action-btn selected" onclick="selectDC('${dc.DataCenter}')">重新测试</button>` : `<button class="action-btn" onclick="selectDC('${dc.DataCenter}')">选择测试</button>`);
-                const tr = `<tr><td><strong>${dc.DataCenter}</strong></td><td>${dc.City}</td><td>${dc.IPCount}</td><td style="color:${latencyColor}; font-weight:600;">${dc.MinLatency} ms</td><td>${btn}</td></tr>`;
+                const tr = `<tr><td><strong>${dc.DataCenter}</strong></td><td>${dc.DCCountry || '-'}</td><td>${dc.City}</td><td>${dc.IPCount}</td><td style="color:${latencyColor}; font-weight:600;">${dc.MinLatency} ms</td><td>${btn}</td></tr>`;
                 tbody.insertAdjacentHTML('beforeend', tr);
             });
             updateBadge('dcCount', dcList.length);
@@ -3304,7 +3306,7 @@
             const isTesting = currentSpeedTestingIP === res.IP;
             const speedDisabled = isTesting || isTaskRunning || officialBatchSpeedRunning;
             const buttonText = isTesting ? '测速中' : (res.Speed ? '重新测速' : '测速');
-            const row = `<tr class="${speedStatus === 'qualified' ? 'row-qualified' : (speedStatus === 'unqualified' ? 'row-unqualified' : '')}"><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};"><span>${speedText}</span>${renderSpeedStatusTag(speedStatus)}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
+            const row = `<tr class="${speedStatus === 'qualified' ? 'row-qualified' : (speedStatus === 'unqualified' ? 'row-unqualified' : '')}"><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.dcCountry || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};"><span>${speedText}</span>${renderSpeedStatusTag(speedStatus)}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
             document.querySelector('#testTable tbody').insertAdjacentHTML('beforeend', row);
         }
 
@@ -3798,6 +3800,7 @@
             { key: 'outboundIP', label: '出站IP' },
             { key: 'ipType', label: 'IP类型' },
             { key: 'dc', label: '数据中心', txt: true },
+            { key: 'dcCountry', label: '落地区域', txt: true },
             { key: 'loc', label: '源IP位置' },
             { key: 'region', label: '地区', txt: true },
             { key: 'city', label: '城市' },
@@ -3828,8 +3831,7 @@
             const qualifiedField = document.getElementById('resultQualifiedFilterField');
             if (qualifiedField) qualifiedField.style.display = '';
             const qualifiedSelect = document.getElementById('resultQualifiedFilter');
-            const hasQualified = currentMode === 'nsb' ? nsbSpeedEnabledForResults : officialSpeedEnabledForResults;
-            if (qualifiedSelect) qualifiedSelect.value = hasQualified ? 'qualified' : 'all';
+            if (qualifiedSelect) qualifiedSelect.value = 'all';
             resultCustomFields = [];
             const customInput = document.getElementById('resultCustomFields');
             if (customInput) customInput.value = '';
@@ -3848,7 +3850,7 @@
         }
 
         function getDefaultResultFieldOrderFor(mode, format) {
-            if (format === 'txt') return ['ipport', 'dc', 'loc'];
+            if (format === 'txt') return currentMode === 'official' ? ['ipport', 'dc', 'dcCountry'] : ['ipport', 'dc', 'loc'];
             if (format === 'csv') return getCompactResultFieldOrderFor(mode);
             const rows = getCurrentResultRows(mode);
             if (!rows.length) return ['ipport'];
@@ -3875,8 +3877,8 @@
 
         function getOfficialResultFieldOrder(mode = resultModalMode) {
             return mode === 'test'
-                ? ['ip', 'port', 'latency', 'speed', 'dc', 'region', 'city']
-                : ['ip', 'port', 'latency', 'dc', 'region', 'city'];
+                ? ['ip', 'port', 'latency', 'speed', 'dc', 'dcCountry', 'region', 'city']
+                : ['ip', 'port', 'latency', 'dc', 'dcCountry', 'region', 'city'];
         }
 
         function renderResultFieldOptions() {
@@ -4203,7 +4205,7 @@
         }
 
         function scanResultToObject(r) {
-            return { ip: r.IP || '', port: String(r.Port ?? ''), ipport: `${r.IP || ''}:${r.Port ?? ''}`, dc: r.DataCenter || '', region: r.Region || '', city: r.City || '', latency: r.LatencyStr || '' };
+            return { ip: r.IP || '', port: String(r.Port ?? ''), ipport: `${r.IP || ''}:${r.Port ?? ''}`, dc: r.DataCenter || '', dcCountry: r.DCCountry || '', region: r.Region || '', city: r.City || '', latency: r.LatencyStr || '' };
         }
 
         function testResultToObject(r) {
@@ -4214,6 +4216,7 @@
                 port: String(port),
                 ipport: `${r.IP || ''}:${port}`,
                 dc: scan.DataCenter || r.DataCenter || '',
+                dcCountry: scan.DCCountry || r.DCCountry || '',
                 region: scan.Region || r.Region || '',
                 city: scan.City || r.City || '',
                 latency: `${(r.AvgLatency / 1_000_000).toFixed(0)}ms`,
@@ -4424,13 +4427,8 @@
             }
             const fields = getDefaultResultFieldOrderFor(mode, format || 'txt');
             let rows = getCurrentResultRows(mode);
-            if (currentMode === 'nsb' && nsbSpeedEnabledForResults) {
-                rows = rows.filter((row) => matchesQualifiedFilter(row, 'qualified'));
-            } else if (currentMode === 'official' && officialSpeedEnabledForResults) {
-                rows = rows.filter((row) => matchesOfficialQualifiedFilter(row, 'qualified'));
-            }
             if (!rows.length) {
-                log('自动上传跳过: 没有合格结果');
+                log('自动上传跳过: 没有可上传结果');
                 return;
             }
             const content = buildResultContent(format || 'txt', rows, fields);
@@ -4617,6 +4615,14 @@
                     } else {
                         addNSBLiveResult(msg.data || {}, currentMode === 'nsb');
                     }
+                    break;
+                case 'nsb_scan_sorted':
+                    if (isStoppingTask) break;
+                    nsbLiveRows = [];
+                    nsbLiveIndex = {};
+                    nsbLiveRowElements = {};
+                    (msg.data || []).forEach((row) => addNSBLiveResult(row || {}, false));
+                    if (currentMode === 'nsb') renderAllNSBLiveRows();
                     break;
                 case 'nsb_speed_complete':
                     if (isStoppingTask) {

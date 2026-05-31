@@ -80,6 +80,7 @@ func scanOfficialIP(ctx context.Context, ip string, port int) (*ScanResult, stri
 		IP:          ip,
 		Port:        port,
 		DataCenter:  dataCenter,
+		DCCountry:   loc.Cca2,
 		Region:      loc.Region,
 		City:        loc.City,
 		LatencyStr:  fmt.Sprintf("%dms", tcpDuration.Milliseconds()),
@@ -261,6 +262,7 @@ func runOfficialTask(ctx context.Context, session *appSession, ipType int, scanM
 		if _, ok := dcMap[res.DataCenter]; !ok {
 			dcMap[res.DataCenter] = &DataCenterInfo{
 				DataCenter: res.DataCenter,
+				DCCountry:  res.DCCountry,
 				City:       res.City,
 				IPCount:    0,
 				MinLatency: 999999,
@@ -355,6 +357,7 @@ func runDetailedTest(ctx context.Context, session *appSession, selectedDC string
 		}
 		if scan, ok := scanByIP[ip]; ok {
 			res.DataCenter = scan.DataCenter
+			res.DCCountry = scan.DCCountry
 			res.Region = scan.Region
 			res.City = scan.City
 		}
