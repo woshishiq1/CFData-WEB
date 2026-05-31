@@ -47,6 +47,7 @@ type location struct {
 
 type DataCenterInfo struct {
 	DataCenter string
+	DCCountry  string
 	City       string
 	IPCount    int
 	MinLatency int
@@ -56,6 +57,7 @@ type ScanResult struct {
 	IP          string
 	Port        int
 	DataCenter  string
+	DCCountry   string
 	Region      string
 	City        string
 	LatencyStr  string
@@ -66,6 +68,7 @@ type TestResult struct {
 	IP         string
 	Port       int
 	DataCenter string
+	DCCountry  string
 	Region     string
 	City       string
 	MinLatency time.Duration

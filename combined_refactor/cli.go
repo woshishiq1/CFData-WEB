@@ -129,6 +129,7 @@ var cliResultFields = []cliResultField{
 	{Key: "outboundIP", Label: "出站IP"},
 	{Key: "ipType", Label: "IP类型"},
 	{Key: "dc", Label: "数据中心"},
+	{Key: "dcCountry", Label: "落地区域"},
 	{Key: "loc", Label: "源IP位置"},
 	{Key: "region", Label: "地区"},
 	{Key: "city", Label: "城市"},
@@ -201,7 +202,7 @@ var (
 		{name: "file", description: "非标模式输入文件路径", defaultValue: ""},
 		{name: "sourceurl", description: "非标模式网络输入 URL；与 -file 同时提供时优先使用 -file", defaultValue: ""},
 		{name: "nsbiptype", description: "非标模式最终导出 IP 类型筛选：all、ipv4 或 ipv6；只影响导出和上传内容", defaultValue: "all"},
-		{name: "nsbqualified", description: "非标模式只导出测速合格结果；未测速、测速失败或低于阈值的结果不会导出", defaultValue: "true"},
+		{name: "nsbqualified", description: "非标模式导出全部结果；仅在需要时可手动筛选合格结果", defaultValue: "false"},
 		{name: "speedtest", description: "非标测速线程数；表示同时测速的 IP 数量，0 表示不测速", defaultValue: "0"},
 		{name: "nsbdc", description: "非标模式指定结果数据中心；留空不限制", defaultValue: ""},
 		{name: "tls", description: "非标模式是否启用 TLS", defaultValue: "true"},
@@ -229,7 +230,7 @@ func registerCLIFlags() *cliConfig {
 	flag.StringVar(&cfg.sourceURL, "sourceurl", "", "非标模式网络输入 URL；与 -file 同时提供时优先使用 -file")
 	flag.IntVar(&cfg.nsbFallbackPort, "nsbfallbackport", 0, "非标输入缺省端口；不填时随 TLS 自动使用 443/80")
 	flag.StringVar(&cfg.nsbIPType, "nsbiptype", "all", "非标模式最终导出 IP 类型筛选：all、ipv4 或 ipv6")
-	flag.BoolVar(&cfg.nsbQualified, "nsbqualified", true, "非标模式只导出测速合格结果")
+	flag.BoolVar(&cfg.nsbQualified, "nsbqualified", false, "非标模式导出全部结果")
 	flag.StringVar(&cfg.nsbDC, "nsbdc", "", "非标模式指定结果数据中心")
 	flag.StringVar(&cfg.outFile, "out", "ip.csv", "CLI 输出文件名")
 	flag.IntVar(&cfg.speedLimit, "speedlimit", 5, "官方模式测速达标结果上限；0 表示关闭官方测速")
@@ -489,7 +490,7 @@ func defaultCLIExportConfig() cliExportConfig {
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, NSBIPType: "all", NSBQualified: true, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
+	return cliFileConfig{CLI: true, Mode: "official", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, NSBIPType: "all", NSBQualified: false, NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
@@ -1144,7 +1145,7 @@ func pickBestDataCenter(scanResults []ScanResult) string {
 }
 
 func runOfficialSpeedTests(ctx context.Context, session *appSession, results []TestResult, port int, limit int, speedMinMB float64) []TestResult {
-	_, qualified := runOfficialSpeedTestsCore(ctx, results, port, limit, speedMinMB, speedTestURL, func(current, total, qualifiedCount int, result TestResult) {
+	updated, _ := runOfficialSpeedTestsCore(ctx, results, port, limit, speedMinMB, speedTestURL, func(current, total, qualifiedCount int, result TestResult) {
 		setCLIProgress(session, "speed", min(qualifiedCount, limit), limit)
 		fmt.Printf("%s[speed]%s %s %s:%d %s\n", ansiMagenta, ansiReset, renderCLIProgress(session, "speed"), result.IP, port, colorizeSpeedString(result.Speed))
 		if speedMB, ok := parseSpeedMBForSort(result.Speed); ok && speedMB >= speedMinMB {
@@ -1153,7 +1154,7 @@ func runOfficialSpeedTests(ctx context.Context, session *appSession, results []T
 	}, func() {
 		fmt.Printf("%s[official]%s %s\n", ansiYellow, ansiReset, speedRateLimitMessage)
 	})
-	return qualified
+	return updated
 }
 
 func printCLIConfig(cfg *cliConfig) {
@@ -1211,7 +1212,7 @@ func printCLIConfig(cfg *cliConfig) {
 		{"file", lookupCLIFlagDescription(cliNSBFlags, "file"), cfg.file, ""},
 		{"sourceurl", lookupCLIFlagDescription(cliNSBFlags, "sourceurl"), cfg.sourceURL, ""},
 		{"nsbiptype", lookupCLIFlagDescription(cliNSBFlags, "nsbiptype"), cfg.nsbIPType, "all"},
-		{"nsbqualified", lookupCLIFlagDescription(cliNSBFlags, "nsbqualified"), strconv.FormatBool(cfg.nsbQualified), "true"},
+		{"nsbqualified", lookupCLIFlagDescription(cliNSBFlags, "nsbqualified"), strconv.FormatBool(cfg.nsbQualified), "false"},
 		{"speedtest", lookupCLIFlagDescription(cliNSBFlags, "speedtest"), strconv.Itoa(cfg.speedTest), "0"},
 		{"nsbdc", lookupCLIFlagDescription(cliNSBFlags, "nsbdc"), cfg.nsbDC, ""},
 		{"tls", lookupCLIFlagDescription(cliNSBFlags, "tls"), strconv.FormatBool(cfg.enableTLS), "true"},
@@ -1729,7 +1730,7 @@ func applyCLICustomFields(rows []cliResultRow, fields []cliCustomField) []cliRes
 func officialScanRows(scanResults []ScanResult) []cliResultRow {
 	rows := make([]cliResultRow, 0, len(scanResults))
 	for _, res := range scanResults {
-		rows = append(rows, cliResultRow{"ip": res.IP, "port": strconv.Itoa(res.Port), "ipport": fmt.Sprintf("%s:%d", res.IP, res.Port), "dc": res.DataCenter, "region": res.Region, "city": res.City, "latency": res.LatencyStr})
+		rows = append(rows, cliResultRow{"ip": res.IP, "port": strconv.Itoa(res.Port), "ipport": fmt.Sprintf("%s:%d", res.IP, res.Port), "dc": res.DataCenter, "dcCountry": res.DCCountry, "region": res.Region, "city": res.City, "latency": res.LatencyStr})
 	}
 	return rows
 }
@@ -1751,9 +1752,10 @@ func officialResultRows(scanResults []ScanResult, testResults []TestResult) []cl
 		if port == 0 {
 			port = res.Port
 		}
-		rows = append(rows, cliResultRow{"ip": res.IP, "port": strconv.Itoa(port), "ipport": fmt.Sprintf("%s:%d", res.IP, port), "dc": scan.DataCenter, "region": scan.Region, "city": scan.City, "latency": fmt.Sprintf("%dms", res.AvgLatency/time.Millisecond), "speed": res.Speed})
+		rows = append(rows, cliResultRow{"ip": res.IP, "port": strconv.Itoa(port), "ipport": fmt.Sprintf("%s:%d", res.IP, port), "dc": scan.DataCenter, "dcCountry": scan.DCCountry, "region": scan.Region, "city": scan.City, "latency": fmt.Sprintf("%dms", res.AvgLatency/time.Millisecond), "speed": res.Speed})
 		if rows[len(rows)-1]["dc"] == "" {
 			rows[len(rows)-1]["dc"] = res.DataCenter
+			rows[len(rows)-1]["dcCountry"] = res.DCCountry
 			rows[len(rows)-1]["region"] = res.Region
 			rows[len(rows)-1]["city"] = res.City
 		}
