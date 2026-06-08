@@ -711,7 +711,7 @@
         }
 
         .nsb-scan-actions.official-scan-actions {
-            grid-template-columns: auto auto;
+            grid-template-columns: minmax(92px, auto) minmax(92px, auto);
         }
 
         .official-test-actions .action-btn,
@@ -1695,6 +1695,7 @@
                             </select>
                             <button class="action-btn export-btn" id="btnNSBBatchSpeed" onclick="startNSBBatchSpeed(false)" disabled>🚀 一键测速</button>
                             <button class="action-btn export-btn" id="btnNSBContinueSpeed" onclick="startNSBBatchSpeed(true)" disabled>⏭️ 继续测速</button>
+                            <button class="action-btn export-btn" id="btnNSBSort" onclick="openSortModal('nsb')">↕️ 一键排序</button>
                             <button class="action-btn export-btn" id="btnScanCopy" onclick="copyDisplayedResults('scan', event)">📋 一键复制</button>
                             <button class="action-btn export-btn" id="btnScanResultAction" onclick="openResultModal('scan')">📥 结果操作</button>
                         </span>
@@ -1732,6 +1733,7 @@
                             </select>
                             <button class="action-btn export-btn" id="btnBatchSpeed" onclick="startOfficialBatchSpeed(false)" disabled>🚀 一键测速</button>
                             <button class="action-btn export-btn" id="btnContinueBatchSpeed" onclick="startOfficialBatchSpeed(false, true)" disabled>⏭️ 继续测速</button>
+                            <button class="action-btn export-btn" id="btnTestSort" onclick="openSortModal('official')">↕️ 一键排序</button>
                             <button class="action-btn export-btn" id="btnTestCopy" onclick="copyDisplayedResults('test', event)">📋 一键复制</button>
                             <button class="action-btn export-btn" id="btnTestResultAction" onclick="openResultModal('test')">📥 结果操作</button>
                         </span>
@@ -1883,6 +1885,50 @@
         </div>
     </div>
 
+    <div class="modal-mask" id="sortModalMask">
+        <div class="result-modal">
+            <div class="modal-head">
+                <h3 id="sortModalTitle">一键排序</h3>
+                <button class="modal-close" onclick="closeSortModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-grid">
+                    <div class="modal-field">
+                        <label>第 1 优先级</label>
+                        <select id="sortPriority1">
+                            <option value="loss" selected>丢包率</option>
+                            <option value="latency">延迟</option>
+                            <option value="speed">网速</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label>第 2 优先级</label>
+                        <select id="sortPriority2">
+                            <option value="loss">丢包率</option>
+                            <option value="latency">延迟</option>
+                            <option value="speed" selected>网速</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label>第 3 优先级</label>
+                        <select id="sortPriority3">
+                            <option value="loss">丢包率</option>
+                            <option value="latency" selected>延迟</option>
+                            <option value="speed">网速</option>
+                        </select>
+                    </div>
+                    <div class="modal-field full">
+                        <label>排序说明</label>
+                        <pre class="result-preview">丢包率和延迟按从低到高排序；网速按从高到低排序。网速为空或未测速会排在测速失败前面。</pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions footer">
+                <button class="action-btn export-btn" onclick="applySortModal()">应用排序</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-mask" id="proxyWarningMask">
         <div class="result-modal proxy-warning-modal">
             <div class="modal-head">
@@ -1963,6 +2009,7 @@
         let proxyCountryCheckTimer = null;
         let proxyWarningSinglePass = false;
         let resultModalMode = 'scan';
+        let sortModalMode = 'official';
         let resultFieldOrder = [];
         let resultCustomFields = [];
         let autoUploadKeys = new Set();
@@ -2775,6 +2822,8 @@
                 continueBtn.disabled = disabled || !nsbContinueSpeedUnlocked || !rows.some((row) => getSpeedStatus(row.speed, isNSBSpeedQualified(row.speed)) === 'untested');
                 continueBtn.textContent = nsbBatchSpeedRunning ? '测速中...' : '⏭️ 继续测速';
             }
+            const sortBtn = document.getElementById('btnNSBSort');
+            if (sortBtn) sortBtn.style.display = visible ? 'inline-flex' : 'none';
         }
 
         function syncNSBSpeedConfigState() {
@@ -3824,20 +3873,17 @@
             const rows = currentMode === 'nsb' ? getNSBResultObjects() : (mode === 'test' ? testData.map(testResultToObject) : scanData.map(scanResultToObject));
             if (!rows.length) return alert('暂无可操作结果');
             document.getElementById('resultModalTitle').textContent = '结果操作';
-            document.getElementById('resultFormat').value = 'txt';
-            document.getElementById('resultFileName').value = currentMode === 'nsb' ? 'Cloudflare_NSB_Results' : (resultModalMode === 'test' ? 'Cloudflare_SpeedTest_Results' : 'Cloudflare_Scan_Results');
+            const formatSelect = document.getElementById('resultFormat');
+            if (formatSelect && !formatSelect.value) formatSelect.value = 'txt';
+            const nameInput = document.getElementById('resultFileName');
+            if (nameInput && !nameInput.value.trim()) nameInput.value = currentMode === 'nsb' ? 'Cloudflare_NSB_Results' : (resultModalMode === 'test' ? 'Cloudflare_SpeedTest_Results' : 'Cloudflare_Scan_Results');
             const filterField = document.getElementById('resultIPTypeFilterField');
             if (filterField) filterField.style.display = currentMode === 'nsb' ? '' : 'none';
             const filterSelect = document.getElementById('resultIPTypeFilter');
-            if (filterSelect) filterSelect.value = 'all';
+            if (filterSelect && currentMode === 'official') filterSelect.value = 'all';
             const qualifiedField = document.getElementById('resultQualifiedFilterField');
             if (qualifiedField) qualifiedField.style.display = '';
-            const qualifiedSelect = document.getElementById('resultQualifiedFilter');
-            if (qualifiedSelect) qualifiedSelect.value = 'all';
-            resultCustomFields = [];
-            const customInput = document.getElementById('resultCustomFields');
-            if (customInput) customInput.value = '';
-            resultFieldOrder = getDefaultResultFieldOrder(document.getElementById('resultFormat').value);
+            if (!resultFieldOrder.length) resultFieldOrder = getDefaultResultFieldOrder(document.getElementById('resultFormat').value);
             renderGitHubAccounts();
             renderResultFieldOptions();
             document.getElementById('resultModalMask').classList.add('active');
@@ -3845,6 +3891,128 @@
 
         function closeResultModal() {
             document.getElementById('resultModalMask').classList.remove('active');
+        }
+
+        function openSortModal(mode) {
+            sortModalMode = mode === 'nsb' ? 'nsb' : 'official';
+            const count = sortModalMode === 'nsb' ? (nsbRows.length || nsbLiveRows.length) : testData.length;
+            if (!count) return alert('暂无可排序结果');
+            document.getElementById('sortModalTitle').textContent = sortModalMode === 'nsb' ? '非标测速一键排序' : '官方详细测试一键排序';
+            document.getElementById('sortModalMask').classList.add('active');
+        }
+
+        function closeSortModal() {
+            document.getElementById('sortModalMask').classList.remove('active');
+        }
+
+        function getSortPriorities() {
+            const values = ['sortPriority1', 'sortPriority2', 'sortPriority3'].map((id) => document.getElementById(id)?.value || '').filter(Boolean);
+            return values.filter((value, index) => values.indexOf(value) === index);
+        }
+
+        function compareSortValues(a, b, key) {
+            if (key === 'speed') {
+                const speedA = parseSortSpeed(a.speed);
+                const speedB = parseSortSpeed(b.speed);
+                if (speedA.rank !== speedB.rank) return speedA.rank - speedB.rank;
+                if (speedA.rank === 0 && speedA.value !== speedB.value) return speedB.value - speedA.value;
+                return 0;
+            }
+            if (key === 'loss') return compareAscending(parseSortNumber(a.lossRate), parseSortNumber(b.lossRate));
+            if (key === 'latency') return compareLatencyValues(a.latency, b.latency);
+            return 0;
+        }
+
+        function compareLatencyValues(a, b) {
+            const valuesA = Array.isArray(a) ? a : [a];
+            const valuesB = Array.isArray(b) ? b : [b];
+            const length = Math.max(valuesA.length, valuesB.length);
+            for (let i = 0; i < length; i++) {
+                const result = compareAscending(parseSortNumber(valuesA[i]), parseSortNumber(valuesB[i]));
+                if (result !== 0) return result;
+            }
+            return 0;
+        }
+
+        function compareAscending(a, b) {
+            const safeA = Number.isFinite(a) ? a : Number.MAX_SAFE_INTEGER;
+            const safeB = Number.isFinite(b) ? b : Number.MAX_SAFE_INTEGER;
+            return safeA - safeB;
+        }
+
+        function parseSortNumber(value) {
+            const text = String(value ?? '').trim().replace('%', '').replace(/ms$/i, '').trim();
+            const parsed = parseFloat(text);
+            return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+        }
+
+        function parseSortSpeed(value) {
+            const text = String(value ?? '').trim();
+            if (!text || text === '-' || text === '未测速') return { rank: 1, value: 0 };
+            if (text.includes('MB/s')) {
+                const parsed = parseFloat(text);
+                if (Number.isFinite(parsed)) return { rank: 0, value: parsed };
+            }
+            return { rank: 2, value: 0 };
+        }
+
+        function compareSortableRows(a, b, priorities) {
+            for (const key of priorities) {
+                const result = compareSortValues(a.row, b.row, key);
+                if (result !== 0) return result;
+            }
+            return a.index - b.index;
+        }
+
+        function applySortModal() {
+            const priorities = getSortPriorities();
+            if (!priorities.length) return alert('请选择排序优先级');
+            if (sortModalMode === 'nsb') applyNSBSort(priorities);
+            else applyOfficialTestSort(priorities);
+            closeSortModal();
+        }
+
+        function applyOfficialTestSort(priorities) {
+            testData = testData.map((item, index) => ({ item, index, row: officialTestSortObject(item) }))
+                .sort((a, b) => compareSortableRows(a, b, priorities))
+                .map((entry) => entry.item);
+            if (currentMode === 'official') renderAllTestResults();
+            log('官方详细测试结果已按自定义优先级排序');
+        }
+
+        function officialTestSortObject(item) {
+            return {
+                lossRate: `${(item.LossRate || 0) * 100}%`,
+                latency: [Math.round((item.MinLatency || 0) / 1_000_000), Math.round((item.MaxLatency || 0) / 1_000_000), Math.round((item.AvgLatency || 0) / 1_000_000)],
+                speed: item.Speed || '未测速',
+            };
+        }
+
+        function applyNSBSort(priorities) {
+            if (nsbRows.length) {
+                const normalizedHeaders = nsbHeaders.map(normalizeNSBHeader);
+                const lossIndex = normalizedHeaders.indexOf('丢包率');
+                const latencyIndex = normalizedHeaders.indexOf('网络延迟');
+                const speedIndex = normalizedHeaders.indexOf('下载速度');
+                nsbRows = nsbRows.map((item, index) => ({ item, index, row: { lossRate: item[lossIndex], latency: item[latencyIndex], speed: item[speedIndex] } }))
+                    .sort((a, b) => compareSortableRows(a, b, priorities))
+                    .map((entry) => entry.item);
+                renderScanRowsCSV(nsbHeaders, nsbRows);
+            } else {
+                nsbLiveRows = nsbLiveRows.map((item, index) => ({ item, index, row: item }))
+                    .sort((a, b) => compareSortableRows(a, b, priorities))
+                    .map((entry) => entry.item);
+                rebuildNSBLiveIndex();
+                if (currentMode === 'nsb') renderAllNSBLiveRows();
+            }
+            log('非标测速结果已按自定义优先级排序');
+        }
+
+        function rebuildNSBLiveIndex() {
+            nsbLiveIndex = {};
+            nsbLiveRows.forEach((row, index) => {
+                nsbLiveIndex[(row.ip || '') + ':' + (row.port || '')] = index;
+            });
         }
 
         function getDefaultResultFieldOrder(format) {
