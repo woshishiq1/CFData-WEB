@@ -242,7 +242,7 @@ jobs:
             --jq '[.[] | select(.draft == false and .tag_name != env.VERSION and (env.CURRENT_PRERELEASE == "true" or .prerelease == false))][0].tag_name // ""')"
 
           if [ -n "$previous_tag" ] && git rev-parse "$previous_tag^{commit}" >/dev/null 2>&1; then
-            changelog="$(git log --pretty=format:'- %s (%h)' "$previous_tag..$CURRENT_SHA")"
+            changelog="$(git log --no-merges --pretty=format:'- %s (%h)' "$previous_tag..$CURRENT_SHA")"
             if [ -z "$changelog" ]; then
               changelog="- 本次没有新增提交"
             fi
