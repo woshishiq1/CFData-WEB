@@ -1,0 +1,74 @@
+name: Docker Publish (Master Only)
+
+on:
+  push:
+ #   branches:
+ #     - master  # master 推送时更新 latest
+    tags:
+      - "v*"    # 任何分支推 v* 标签时更新对应版本镜像
+  workflow_dispatch: # 保留手动触发开关
+
+env:
+  REGISTRY: docker.io
+  # 换成你自己的镜像名称
+  IMAGE_NAME: woshi17/cfdata-web
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Master Branch
+        uses: actions/checkout@v4
+        with:
+          # 关键：强制锁定 master，确保代码是最新的
+          ref: master
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log into Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_HUB_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      # --- 新增：提取版本号供编译使用 ---
+      - name: Set App Version
+        id: vars
+        run: |
+          version="${{ github.ref_name }}"
+          # 如果是 master 分支推送，版本号标记为 latest 或 master
+          if [[ "${{ github.ref_type }}" == "branch" ]]; then
+            version="latest"
+          fi
+          echo "APP_VERSION=$version" >> $GITHUB_OUTPUT
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref_type == 'branch' }}
+            type=ref,event=tag
+
+      - name: Build and push Multi-Arch Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          # 关键注入点：将提取的版本号传给 Dockerfile 里的 ARG APP_VERSION
+          build-args: |
+            APP_VERSION=${{ steps.vars.outputs.APP_VERSION }}
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
