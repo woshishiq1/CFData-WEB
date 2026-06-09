@@ -1,5 +1,4 @@
 name: Build and Release
-
 on:
   workflow_dispatch:
     inputs:
@@ -46,7 +45,7 @@ jobs:
           - goos: windows
             goarch: arm64
             ext: ".exe"
-          # 保留你自定义的原生安卓（Termux 等环境）支持
+          # 安卓原生二进制（Termux 等）
           - goos: android
             goarch: arm64
 
@@ -91,23 +90,22 @@ jobs:
           curl -fsSL --retry 3 --connect-timeout 10 \
             https://curl.se/ca/cacert.pem \
             -o combined_refactor/ca-certificates.crt
-          cert_count=$(grep -c "BEGIN CERTIFICATE" combined_refactor/ca-certificates.crt || true)
-          echo "Downloaded ${cert_count} CA certificates."
 
       - name: Build
         run: |
           ext="${{ matrix.ext || '' }}"
-          # 修复了双重 $ 符号的 bug
+          # 不改名，保持 cfdata-android-arm64
           filename="cfdata-${{ matrix.goos }}-${{ matrix.goarch }}$ext"
-          
+         
           extra_flags=""
           if [ "${{ matrix.goos }}" = "android" ]; then
             extra_flags="-buildmode=pie"
           fi
-          
+         
           echo "Building ${filename}..."
           cd combined_refactor
-          go build $extra_flags -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../release_assets/${filename} .
+          go build $extra_flags -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" \
+            -o ../release_assets/${filename} .
         env:
           GOARCH: ${{ matrix.goarch }}
           GOOS: ${{ matrix.goos }}
@@ -128,7 +126,7 @@ jobs:
           name: asset-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext || '' }}
           path: release_assets/*
 
-  # 👑 绝对不会再弄丢的 Android APK 编译部分
+  # ==================== Android APK ====================
   android-apk:
     name: Android APK App
     runs-on: ubuntu-latest
@@ -181,7 +179,8 @@ jobs:
           GOARCH: arm64
           CGO_ENABLED: "0"
         run: |
-          go build -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../app/src/main/jniLibs/arm64-v8a/libcfdata.so .
+          go build -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" \
+            -o ../app/src/main/jniLibs/arm64-v8a/libcfdata.so .
 
       - name: Prepare Release Keystore
         env:
@@ -206,7 +205,6 @@ jobs:
         run: |
           unzip -l app/build/outputs/apk/release/app-release.apk | tee apk-contents.txt
           grep -q "lib/arm64-v8a/libcfdata.so" apk-contents.txt
-          unzip -l app/build/outputs/apk/release/app-release.apk "lib/arm64-v8a/libcfdata.so"
 
       - name: Prepare APK Asset
         run: |
@@ -221,7 +219,7 @@ jobs:
           name: asset-android-arm64-apk
           path: release_assets/*
 
-  # 🐳 你的独立 Docker 打包任务
+  # ==================== Docker ====================
   docker:
     name: Docker Publish
     runs-on: ubuntu-latest
@@ -278,11 +276,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # 📦 最终的发布任务
+  # ==================== Release ====================
   release:
     name: Release
-    # 强制等待 build 和 android-apk 跑完再发版
-    needs: [build, android-apk] 
+    needs: [build, android-apk]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -296,6 +293,24 @@ jobs:
           path: artifacts
           pattern: asset-*
           merge-multiple: true
+
+      # 【核心修复】统一生成所有 SHA256，保证 cfdata-android-arm64.sha256 不会丢失
+      - name: Generate SHA256 for all assets
+        run: |
+          cd artifacts
+          echo "=== Files before SHA generation ==="
+          ls -la
+          
+          rm -f *.sha256
+          
+          echo "Generating SHA256 for all files..."
+          for file in $(find . -type f ! -name '*.sha256' -print); do
+            echo "→ $file"
+            sha256sum "$file" | awk '{print $1}' > "${file}.sha256"
+          done
+          
+          echo "=== Final files ==="
+          ls -la
 
       - name: Get version
         id: get-version
@@ -315,7 +330,6 @@ jobs:
           build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
           echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
 
-      # 严格保留上游的 Changelog 过滤逻辑
       - name: Generate changelog
         id: changelog
         env:
@@ -325,10 +339,8 @@ jobs:
           CURRENT_PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
         run: |
           git fetch --tags --force
-
           previous_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
             --jq '[.[] | select(.draft == false and .tag_name != env.VERSION and (env.CURRENT_PRERELEASE == "true" or .prerelease == false))][0].tag_name // ""')"
-
           if [ -n "$previous_tag" ] && git rev-parse "$previous_tag^{commit}" >/dev/null 2>&1; then
             changelog="$(git log --no-merges --pretty=format:'- %s (%h)' "$previous_tag..$CURRENT_SHA")"
             if [ -z "$changelog" ]; then
@@ -342,7 +354,6 @@ jobs:
             compare_link="无"
             changelog="- 首次发布，未找到上一个 Release 基准"
           fi
-
           {
             echo "PREVIOUS_TAG=$previous_tag"
             echo "COMPARE_URL=$compare_url"
@@ -360,26 +371,15 @@ jobs:
           name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
           body: |
             ## ${{ steps.get-version.outputs.VERSION }} 发布说明
-
             构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
-
             构建方式：GitHub Actions
-
             上一个版本：${{ steps.changelog.outputs.PREVIOUS_TAG || '无' }}
-
             对比变更：${{ steps.changelog.outputs.COMPARE_LINK }}
-
             ### 本次变更
-
             ${{ steps.changelog.outputs.CHANGELOG }}
-
             ---
-
             采用 GitHub Actions 自动构建。
-
-            支持 macOS / Windows / Linux（ARM64、AMD64）。
-
-            支持 Android（ARM64 APK）。
+            支持 macOS / Windows / Linux（ARM64、AMD64）+ Android（原生二进制 + APK）。
           files: artifacts/*
           draft: false
           prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
