@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   build:
+    name: Build Multi-Platform Binaries
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -41,6 +42,10 @@ jobs:
           - goos: windows
             goarch: arm64
             ext: ".exe"
+          # 保留你自定义的原生安卓（Termux 等环境）支持
+          - goos: android
+            goarch: arm64
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,6 +77,10 @@ jobs:
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
           fi
+          # 保留你的版本号兜底处理，确保在分支运行或为空时表现正常
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
+          fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
       - name: Download CA Certificates
@@ -80,23 +89,32 @@ jobs:
             https://curl.se/ca/cacert.pem \
             -o combined_refactor/ca-certificates.crt
           cert_count=$(grep -c "BEGIN CERTIFICATE" combined_refactor/ca-certificates.crt || true)
-          echo "Downloaded ${cert_count} CA certificates before build."
+          echo "Downloaded ${cert_count} CA certificates."
 
       - name: Build
         run: |
           ext="${{ matrix.ext || '' }}"
-          filename="cfdata-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
+          filename="cfdata-${{ matrix.goos }}-${{ matrix.goarch }}$${ext}"
+          
+          # 保留你的个性化安全构建策略，针对 Android 开启 PIE 模式
+          extra_flags=""
+          if [ "${{ matrix.goos }}" = "android" ]; then
+            extra_flags="-buildmode=pie"
+          fi
+          
           echo "Building ${filename}..."
           cd combined_refactor
-          go build -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../release_assets/${filename} .
+          go build $extra_flags -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../release_assets/${filename} .
         env:
           GOARCH: ${{ matrix.goarch }}
           GOOS: ${{ matrix.goos }}
+          CGO_ENABLED: 0
+          GODEBUG: netdns=go
 
       - name: Generate SHA256
         run: |
           cd release_assets
-          for file in *.sha256; do rm -f "$file"; done
+          rm -f *.sha256
           for file in $(find . -type f ! -name '*.sha256'); do
             sha256sum "$file" | awk '{print $1}' > "${file}.sha256"
           done
@@ -108,7 +126,7 @@ jobs:
           path: release_assets/*
 
   android-apk:
-    name: Android APK
+    name: Android APK App
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -140,6 +158,9 @@ jobs:
           version="${{ github.event.inputs.version }}"
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
+          fi
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
           fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
@@ -198,13 +219,13 @@ jobs:
 
   release:
     name: Release
-    needs: [build, android-apk]
+    needs: [build, android-apk] # 必须等待多平台二进制和 Android APK 两个任务同时跑完
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # 引入上游改动：获取完整历史以用于生成 changelog
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -220,6 +241,9 @@ jobs:
           if [ -z "$version" ]; then
             version="${{ github.ref_name }}"
           fi
+          if [[ "$version" == "main" || "$version" == "master" || -z "$version" ]]; then
+            version="latest"
+          fi
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
       - name: Get build time
@@ -228,6 +252,7 @@ jobs:
           build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
           echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
 
+      # 引入上游核心更新：自动生成包含差异链接和 Commit 日志的 Changelog
       - name: Generate changelog
         id: changelog
         env:
@@ -270,31 +295,35 @@ jobs:
           tag_name: ${{ steps.get-version.outputs.VERSION }}
           target_commitish: ${{ github.sha }}
           name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
+          # 完美融合：将上游的自动变更内容与你原本的双语环境说明合二为一
           body: |
-            ## ${{ steps.get-version.outputs.VERSION }} 发布说明
+            ## ${{ steps.get-version.outputs.VERSION }} 发布说明 / Release Notes
 
-            构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
+            - **构建时间 / Built Time:** ${{ steps.get-time.outputs.BUILD_TIME }}
+            - **构建方式 / Built with:** GitHub Actions
+            - **上一个版本 / Previous Release:** ${{ steps.changelog.outputs.PREVIOUS_TAG || '无 / None' }}
+            - **对比变更 / Compare Changes:** ${{ steps.changelog.outputs.COMPARE_LINK }}
 
-            构建方式：GitHub Actions
-
-            上一个版本：${{ steps.changelog.outputs.PREVIOUS_TAG || '无' }}
-
-            对比变更：${{ steps.changelog.outputs.COMPARE_LINK }}
-
-            ### 本次变更
-
+            ### 本次变更 / Changelog
             ${{ steps.changelog.outputs.CHANGELOG }}
 
             ---
 
-            采用 GitHub Actions 自动构建。
+            ### Android 使用说明 / Android Instructions
+            - **原生 App 版 (Native App):** 下载 `cfdata-android-arm64.apk` 直接在手机上进行安装。
+            - **Termux 命令行版 (CLI for Termux):** 请下载 `cfdata-android-arm64` 并在环境中使用。下载后需执行 `chmod +x cfdata-android-arm64` 赋予执行权限。
 
-            支持 macOS / Windows / Linux（ARM64、AMD64）。
+            ### 校验 / Checksums
+            每个二进制与应用文件均附带同名的 `.sha256` 校验文件。
+            Each binary and app file is accompanied by a matching `.sha256` checksum file.
 
-            支持 Android（ARM64 APK）。
+            ---
+
+            - **支持系统 / Supports:** macOS / Windows / Linux (ARM64, AMD64), Android App (APK) 与 Android (Termux) 原生命令行。
           files: artifacts/*
           draft: false
           prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
+          allowUpdates: true
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
