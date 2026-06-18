@@ -80,6 +80,7 @@ type TestResult struct {
 
 type iptestResult struct {
 	ipAddr         string
+	originalInput  string
 	port           int
 	dataCenter     string
 	locCode        string
@@ -109,6 +110,7 @@ type iptestResult struct {
 
 type nsbScanMessage struct {
 	IP             string `json:"ip"`
+	OriginalInput  string `json:"originalInput,omitempty"`
 	Port           string `json:"port"`
 	TLS            string `json:"tls,omitempty"`
 	DC             string `json:"dc,omitempty"`
@@ -146,6 +148,7 @@ type nsbCSVCompletePayload struct {
 func (r *iptestResult) toNSBMessage(speedStr string) nsbScanMessage {
 	return nsbScanMessage{
 		IP:             r.ipAddr,
+		OriginalInput:  r.originalInput,
 		Port:           strconv.Itoa(r.port),
 		TLS:            strconv.FormatBool(r.visitScheme == "https"),
 		DC:             r.dataCenter,
@@ -182,6 +185,7 @@ func (r *iptestResult) toNSBLiveMessage(speedStr string, compact bool) nsbScanMe
 func (r *iptestResult) toCompactNSBMessage(speedStr string) nsbScanMessage {
 	return nsbScanMessage{
 		IP:             r.ipAddr,
+		OriginalInput:  r.originalInput,
 		Port:           strconv.Itoa(r.port),
 		TLS:            strconv.FormatBool(r.visitScheme == "https"),
 		DC:             r.dataCenter,
@@ -237,21 +241,28 @@ type appSession struct {
 }
 
 type backgroundTaskSnapshot struct {
-	Label       string                 `json:"label"`
-	Mode        string                 `json:"mode"`
-	Phase       string                 `json:"phase"`
-	Message     string                 `json:"message"`
-	Current     int                    `json:"current"`
-	Total       int                    `json:"total"`
-	Percent     float64                `json:"percent"`
-	ResultCount int                    `json:"resultCount"`
-	SpeedCount  int                    `json:"speedCount"`
-	TestCount   int                    `json:"testCount"`
-	DCCount     int                    `json:"dcCount"`
-	Running     bool                   `json:"running"`
-	StartedAt   time.Time              `json:"startedAt"`
-	UpdatedAt   time.Time              `json:"updatedAt"`
-	Params      map[string]interface{} `json:"params,omitempty"`
+	Label          string                 `json:"label"`
+	Mode           string                 `json:"mode"`
+	Phase          string                 `json:"phase"`
+	Message        string                 `json:"message"`
+	Current        int                    `json:"current"`
+	Total          int                    `json:"total"`
+	Percent        float64                `json:"percent"`
+	ResultCount    int                    `json:"resultCount"`
+	SpeedCount     int                    `json:"speedCount"`
+	ScanTotal      int                    `json:"scanTotal"`
+	ScanSuccess    int                    `json:"scanSuccess"`
+	ScanFailed     int                    `json:"scanFailed"`
+	SpeedTotal     int                    `json:"speedTotal"`
+	SpeedSuccess   int                    `json:"speedSuccess"`
+	SpeedFailed    int                    `json:"speedFailed"`
+	SpeedQualified int                    `json:"speedQualified"`
+	TestCount      int                    `json:"testCount"`
+	DCCount        int                    `json:"dcCount"`
+	Running        bool                   `json:"running"`
+	StartedAt      time.Time              `json:"startedAt"`
+	UpdatedAt      time.Time              `json:"updatedAt"`
+	Params         map[string]interface{} `json:"params,omitempty"`
 }
 
 type taskStarter func(ctx context.Context, session *appSession)

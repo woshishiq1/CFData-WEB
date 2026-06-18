@@ -283,6 +283,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if backgroundSession := currentBackgroundTaskSession(); backgroundSession != nil {
 				if session != backgroundSession {
 					backgroundSession.attachWebSocket(ws)
+					session = backgroundSession
 				}
 				backgroundSession.stopTask()
 				return
@@ -304,6 +305,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			backgroundSession.attachWebSocket(ws)
+			session = backgroundSession
 			backgroundSession.sendWSMessage("background_task_following", backgroundSession.backgroundSummary())
 		},
 		"get_background_task_status": func(data json.RawMessage) {

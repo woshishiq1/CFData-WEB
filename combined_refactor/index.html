@@ -648,6 +648,11 @@
             padding: 10px;
             background: var(--card-bg);
             min-width: 0;
+            height: 96px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 6px;
         }
 
         .background-status-label {
@@ -662,6 +667,51 @@
             color: var(--text-main);
             overflow: hidden;
             text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .background-status-wide {
+            grid-column: span 2;
+        }
+
+        .background-status-wide .background-status-value {
+            white-space: normal;
+            line-height: 1.55;
+        }
+
+        .background-stat-line {
+            font-size: 13px;
+            word-break: keep-all;
+        }
+
+        .background-status-wide-full {
+            grid-column: 1 / -1;
+        }
+
+        .background-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .background-stat-cell {
+            display: grid;
+            grid-template-columns: 54px minmax(54px, 1fr);
+            align-items: baseline;
+            column-gap: 6px;
+            min-width: 0;
+            font-size: 13px;
+        }
+
+        .background-stat-name {
+            color: var(--text-secondary);
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .background-stat-number {
+            font-variant-numeric: tabular-nums;
+            text-align: left;
             white-space: nowrap;
         }
 
@@ -1483,6 +1533,19 @@
                 grid-template-columns: 1fr;
             }
 
+            .background-stat-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .background-status-item,
+            .background-status-wide-full {
+                height: 112px;
+            }
+
+            .background-status-wide-full {
+                grid-column: 1;
+            }
+
             .option-item {
                 flex-direction: column;
                 align-items: flex-start;
@@ -1771,11 +1834,10 @@
             <div class="background-status-card background-confirm-card" id="backgroundConfirmCard">
                 <div class="background-status-title">确认转入后台运行？</div>
                 <div class="background-confirm-text">
-                    <div>关闭或刷新页面不会中断任务。</div>
-                    <div>不会恢复断开期间的表格历史结果。</div>
-                    <div>后台任务只保留轻量状态，不做后台恢复同步全部数据。</div>
-                    <div>经过测试，数据量过大时同步全部数据可能导致浏览器崩溃。</div>
-                    <div>大任务建议使用 CLI 查看最终结果文件。</div>
+                    <div>转入后台后，任务会继续运行，关闭或刷新页面不会中断，任务完成后会渲染最终结果。</div>
+                    <div>重新打开页面时，只会显示任务状态和当前进度，不会回放断开期间的表格数据。</div>
+                    <div>这里不会做“后台恢复后同步全部历史数据”，因为大量结果一次性回传可能导致浏览器卡死或崩溃。</div>
+                    <div>如果测试数据量很大，建议使用 CLI 模式。</div>
                 </div>
                 <div class="background-confirm-actions">
                     <button class="action-btn export-btn" onclick="confirmRunTaskInBackground()">确认转入后台</button>
@@ -1794,13 +1856,11 @@
                 <button class="action-btn export-btn" id="btnFollowBackground" onclick="followBackgroundTask()">📡 跟随实时数据</button>
             </div>
             <div class="background-status-grid">
-                <div class="background-status-item"><span class="background-status-label">数据来源</span><div class="background-status-value" id="backgroundSource">-</div></div>
-                <div class="background-status-item"><span class="background-status-label">阶段</span><div class="background-status-value" id="backgroundPhase">-</div></div>
-                <div class="background-status-item"><span class="background-status-label">进度</span><div class="background-status-value" id="backgroundProgressText">-</div></div>
-                <div class="background-status-item"><span class="background-status-label">扫描结果</span><div class="background-status-value" id="backgroundResultCount">0</div></div>
-                <div class="background-status-item"><span class="background-status-label">测速结果</span><div class="background-status-value" id="backgroundSpeedCount">0</div></div>
-                <div class="background-status-item" id="backgroundExtraItem"><span class="background-status-label">详细/数据中心</span><div class="background-status-value" id="backgroundExtraCount">0 / 0</div></div>
-                <div class="background-status-item" style="grid-column:1/-1;"><span class="background-status-label">状态</span><div class="background-status-value" id="backgroundMessage">-</div></div>
+                <div class="background-status-item" style="grid-column:1/-1;"><span class="background-status-label">数据来源</span><div class="background-status-value" id="backgroundSource">-</div></div>
+                <div class="background-status-item" style="grid-column:span 2;"><span class="background-status-label">阶段</span><div class="background-status-value" id="backgroundPhase">-</div></div>
+                <div class="background-status-item" style="grid-column:span 2;"><span class="background-status-label">进度</span><div class="background-status-value" id="backgroundProgressText">-</div></div>
+                <div class="background-status-item background-status-wide-full"><span class="background-status-label">扫描结果</span><div class="background-status-value" id="backgroundResultCount">0</div></div>
+                <div class="background-status-item background-status-wide-full"><span class="background-status-label">测速结果</span><div class="background-status-value" id="backgroundSpeedCount">0</div></div>
             </div>
         </div>
 
@@ -1960,8 +2020,8 @@
                     <div class="modal-field" id="resultQualifiedFilterField">
                         <label>导出合格结果</label>
                         <select id="resultQualifiedFilter" onchange="updateResultPreview()">
-                            <option value="all" selected>导出全部结果</option>
-                            <option value="qualified">仅导出合格</option>
+                            <option value="all">导出全部结果</option>
+                            <option value="qualified" selected>仅导出合格</option>
                             <option value="unqualified">仅导出不合格</option>
                         </select>
                     </div>
@@ -2085,8 +2145,8 @@
                     <div class="modal-field" id="copyQualifiedFilterField">
                         <label>复制合格结果</label>
                         <select id="copyQualifiedFilter" onchange="updateCopyPreview()">
-                            <option value="all" selected>复制全部结果</option>
-                            <option value="qualified">仅复制合格</option>
+                            <option value="all">复制全部结果</option>
+                            <option value="qualified" selected>仅复制合格</option>
                             <option value="unqualified">仅复制不合格</option>
                         </select>
                     </div>
@@ -3067,18 +3127,35 @@
             document.getElementById('backgroundStatusTitle').textContent = `🕘 ${snapshot.label || '后台任务运行中'}`;
             const source = snapshot.params?.sourceURL || snapshot.params?.fileName || (snapshot.mode === 'official' ? '官方内置地址库' : '') || snapshot.params?.outFile || snapshot.params?.dc || '-';
             document.getElementById('backgroundSource').textContent = source;
-            document.getElementById('backgroundPhase').textContent = snapshot.phase || '-';
+            const phaseText = snapshot.phase || '-';
+            let dcSuffix = '';
+            if ((snapshot.testCount || 0) > 0 || (snapshot.dcCount || 0) > 0) {
+                dcSuffix = ` (详细: ${snapshot.testCount || 0} / DC: ${snapshot.dcCount || 0})`;
+            }
+            document.getElementById('backgroundPhase').textContent = phaseText + dcSuffix;
             const current = snapshot.current || 0;
             const total = snapshot.total || 0;
             const percent = Number.isFinite(snapshot.percent) ? snapshot.percent : (total > 0 ? current / total * 100 : 0);
             document.getElementById('backgroundProgressText').textContent = total > 0 ? `${current}/${total} (${Math.round(percent)}%)` : '-';
-            document.getElementById('backgroundResultCount').textContent = snapshot.resultCount || 0;
-            document.getElementById('backgroundSpeedCount').textContent = snapshot.speedCount || 0;
-            const extra = document.getElementById('backgroundExtraItem');
-            const showExtra = (snapshot.testCount || 0) > 0 || (snapshot.dcCount || 0) > 0;
-            if (extra) extra.style.display = showExtra ? 'block' : 'none';
-            document.getElementById('backgroundExtraCount').textContent = `${snapshot.testCount || 0} / ${snapshot.dcCount || 0}`;
-            document.getElementById('backgroundMessage').textContent = snapshot.message || '-';
+            const formatStats = (success, failed, qualified) => {
+                const safeSuccess = success || 0;
+                const safeFailed = failed || 0;
+                const safeTotal = safeSuccess + safeFailed;
+                const safeQualified = qualified ?? safeSuccess;
+                const qualifiedRate = safeTotal > 0 ? `${Math.round(safeQualified / safeTotal * 100)}%` : '-';
+                return [
+                    ['测试数', safeTotal],
+                    ['合格率', qualifiedRate],
+                    ['成功数', safeSuccess],
+                    ['失败数', safeFailed],
+                ].map(([label, value]) => `<span class="background-stat-cell"><span class="background-stat-name">${label}</span><span class="background-stat-number">${value}</span></span>`).join('');
+            };
+            const scanSuccess = snapshot.scanSuccess || 0;
+            const scanFailed = snapshot.scanFailed || 0;
+            const speedSuccess = snapshot.speedSuccess || 0;
+            const speedFailed = snapshot.speedFailed || 0;
+            document.getElementById('backgroundResultCount').innerHTML = `<div class="background-stat-grid">${formatStats(scanSuccess, scanFailed, scanSuccess)}</div>`;
+            document.getElementById('backgroundSpeedCount').innerHTML = `<div class="background-stat-grid">${formatStats(speedSuccess, speedFailed, snapshot.speedQualified || 0)}</div>`;
             const followBtn = document.getElementById('btnFollowBackground');
             if (followBtn) {
                 followBtn.disabled = backgroundTaskFollowing;
@@ -3351,7 +3428,7 @@
             const tbody = document.querySelector('#scanTable tbody');
             const latencyVal = parseFloat(row.LatencyStr);
             const latencyColor = getLatencyColor(latencyVal);
-            const html = `<tr><td>${renderIPCell(row.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.DCCountry || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
+            const html = `<tr><td>${renderIPCell(row.IP, row.OriginalInput || row.originalInput)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.DCCountry || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
             tbody.insertAdjacentHTML('beforeend', html);
         }
 
@@ -3400,15 +3477,23 @@
             return String(v ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         }
 
-        function renderIPCell(ip) {
+        function renderIPCell(ip, originalInput) {
             const rawIP = String(ip ?? '');
             const safeIP = escapeHTML(rawIP);
             const jsIP = escapeJSString(rawIP);
             const hrefIP = encodeURIComponent(rawIP);
-            return `<span class="ip-cell"><span class="copy-ip" onclick="copyToClipboard('${jsIP}', event)">${safeIP}</span><a class="ip-detail-link" href="https://ippure.com/?ip=${hrefIP}" target="_blank" rel="noopener noreferrer" title="前往 ippure.com 查看 IP 详情" onclick="event.stopPropagation()">ⓘ</a></span>`;
+            let domainIcon = '';
+            if (originalInput && originalInput !== rawIP) {
+                const isDomain = /[a-zA-Z]/.test(originalInput);
+                if (isDomain) {
+                    const safeSource = escapeHTML(originalInput);
+                    domainIcon = `<span class="ip-detail-link" title="来源域名: ${safeSource}" onclick="event.stopPropagation()" style="cursor:default;">ⓗ</span>`;
+                }
+            }
+            return `<span class="ip-cell"><span class="copy-ip" onclick="copyToClipboard('${jsIP}', event)">${safeIP}</span>${domainIcon}<a class="ip-detail-link" href="https://ippure.com/?ip=${hrefIP}" target="_blank" rel="noopener noreferrer" title="前往 ippure.com 查看 IP 详情" onclick="event.stopPropagation()">ⓘ</a></span>`;
         }
 
-        function renderNSBRowFromCSV(headers, r) {
+        function renderNSBRowFromCSV(headers, r, originalInput) {
             let ipIndex = headers.indexOf('IP地址');
             let portIndex = headers.indexOf('端口号');
             let latencyIndex = headers.indexOf('网络延迟');
@@ -3420,7 +3505,7 @@
                 const val = escapeHTML(r[idx] ?? '');
                 const rawVal = String(r[idx] ?? '');
                 if (idx === ipIndex && ipIndex !== -1) {
-                    return `<td>${renderIPCell(rawVal)}</td>`;
+                    return `<td>${renderIPCell(rawVal, originalInput)}</td>`;
                 } else if (idx === portIndex && portIndex !== -1) {
                     return `<td><span class="copy-ip" onclick="copyToClipboard('${escapeJSString(rawVal)}', event)">${val}</span></td>`;
                 } else if (idx === latencyIndex && latencyIndex !== -1) {
@@ -3453,11 +3538,13 @@
             tbody.innerHTML = '';
             renderScanHeaders('nsb');
             const visibleHeaders = filterNSBHeaders(headers);
+            const originalInputIndex = headers.map(normalizeNSBHeader).indexOf('OriginalInput');
 
             const filteredRows = filterNSBRowsByQualified(filterNSBRowsByIPType(headers, rows, nsbTableIPTypeFilter), headers, nsbTableQualifiedFilter);
             filteredRows.forEach((r) => {
                 const visibleRow = filterNSBRow(headers, r);
-                const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
+                const originalInput = originalInputIndex !== -1 ? r[originalInputIndex] : undefined;
+                const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow, originalInput);
                 const rowStatus = nsbRowStatusFromCSV(headers, r);
                 tbody.insertAdjacentHTML('beforeend', `<tr class="${rowStatus === 'qualified' ? 'row-qualified' : (rowStatus === 'unqualified' ? 'row-unqualified' : '')}">${tds}</tr>`);
             });
@@ -3466,8 +3553,8 @@
             updateNSBSpeedButtons();
         }
 
-        const NSB_LIVE_HEADERS = ['IP地址', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
-        const NSB_COMPACT_HEADERS = ['IP地址', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织'];
+        const NSB_LIVE_HEADERS = ['IP地址', 'OriginalInput', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
+        const NSB_COMPACT_HEADERS = ['IP地址', 'OriginalInput', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织'];
 
         function normalizeNSBHeader(header) {
             if (header === 'IP') return 'IP地址';
@@ -3476,25 +3563,38 @@
         }
 
         function filterNSBHeaders(headers) {
-            const normalized = (headers || []).map(normalizeNSBHeader);
+            const normalized = (headers || []).map(normalizeNSBHeader).filter(h => h !== 'OriginalInput');
             if (!nsbCompactView) return normalized;
-            return NSB_COMPACT_HEADERS.filter((h) => normalized.includes(h));
+            return NSB_COMPACT_HEADERS.filter((h) => normalized.includes(h) && h !== 'OriginalInput');
         }
 
         function filterNSBRow(headers, row) {
             const normalized = (headers || []).map(normalizeNSBHeader);
-            if (!nsbCompactView) return row;
-            return NSB_COMPACT_HEADERS.filter((h) => normalized.includes(h)).map((h) => row[normalized.indexOf(h)] ?? '');
+            const originalInputIndex = normalized.indexOf('OriginalInput');
+            let filteredRow = row;
+            
+            if (originalInputIndex !== -1) {
+                filteredRow = row.filter((_, idx) => idx !== originalInputIndex);
+            }
+            
+            if (!nsbCompactView) return filteredRow;
+            
+            const adjustedNormalized = normalized.filter(h => h !== 'OriginalInput');
+            return NSB_COMPACT_HEADERS.filter((h) => adjustedNormalized.includes(h) && h !== 'OriginalInput').map((h) => {
+                const idx = adjustedNormalized.indexOf(h);
+                return idx !== -1 ? filteredRow[idx] : '';
+            });
         }
 
         function getVisibleNSBHeaders() {
             if (nsbHeaders.length) return filterNSBHeaders(nsbHeaders);
-            return nsbCompactView ? NSB_COMPACT_HEADERS : NSB_LIVE_HEADERS;
+            const base = nsbCompactView ? NSB_COMPACT_HEADERS : NSB_LIVE_HEADERS;
+            return base.filter(h => h !== 'OriginalInput');
         }
 
         function nsbRowToArray(row) {
             return [
-                row.ip || '', row.port || '', row.tls ?? '-', row.lossRate || '0%', row.latency || '-', row.speed || '-',
+                row.ip || '', row.originalInput || '', row.port || '', row.tls ?? '-', row.lossRate || '0%', row.latency || '-', row.speed || '-',
                 row.outboundIP || '-', row.ipType || '-', row.dc || '-', row.loc || '-',
                 row.region || '-', row.city || '-', row.asnNumber || '-', row.asnOrg || '-',
                 row.visitScheme || '-', row.tlsVersion || '-', row.sni || '-', row.httpVersion || '-',
@@ -3518,7 +3618,7 @@
         function renderNSBLiveRowHTML(row) {
             const visibleHeaders = getVisibleNSBHeaders();
             const visibleRow = filterNSBRow(NSB_LIVE_HEADERS, nsbRowToArray(row));
-            const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
+            const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow, row.originalInput);
             const rowStatus = getSpeedStatus(row.speed, isNSBSpeedQualified(row.speed));
             return `<tr class="${rowStatus === 'qualified' ? 'row-qualified' : (rowStatus === 'unqualified' ? 'row-unqualified' : '')}">${tds}</tr>`;
         }
@@ -3816,7 +3916,7 @@
             const isTesting = currentSpeedTestingIP === res.IP;
             const speedDisabled = isTesting || isTaskRunning || officialBatchSpeedRunning;
             const buttonText = isTesting ? '测速中' : (res.Speed ? '重新测速' : '测速');
-            const row = `<tr class="${speedStatus === 'qualified' ? 'row-qualified' : (speedStatus === 'unqualified' ? 'row-unqualified' : '')}"><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.dcCountry || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};"><span>${speedText}</span>${renderSpeedStatusTag(speedStatus)}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
+            const row = `<tr class="${speedStatus === 'qualified' ? 'row-qualified' : (speedStatus === 'unqualified' ? 'row-unqualified' : '')}"><td>${renderIPCell(res.IP, res.OriginalInput || res.originalInput)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.dcCountry || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};"><span>${speedText}</span>${renderSpeedStatusTag(speedStatus)}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
             document.querySelector('#testTable tbody').insertAdjacentHTML('beforeend', row);
         }
 
@@ -4344,6 +4444,8 @@
             if (filterSelect && resultModalMode !== 'nsb') filterSelect.value = 'all';
             const qualifiedField = document.getElementById('resultQualifiedFilterField');
             if (qualifiedField) qualifiedField.style.display = '';
+            const qualifiedSelect = document.getElementById('resultQualifiedFilter');
+            if (qualifiedSelect) qualifiedSelect.value = 'qualified';
             if (!resultFieldOrder.length) resultFieldOrder = getDefaultResultFieldOrder(document.getElementById('resultFormat').value);
             renderGitHubAccounts();
             renderResultFieldOptions();
@@ -4820,6 +4922,8 @@
             if (filterSelect && copyModalMode !== 'nsb') filterSelect.value = 'all';
             const qualifiedField = document.getElementById('copyQualifiedFilterField');
             if (qualifiedField) qualifiedField.style.display = '';
+            const qualifiedSelect = document.getElementById('copyQualifiedFilter');
+            if (qualifiedSelect) qualifiedSelect.value = 'qualified';
             const rows = getCopyRowsBeforeRange();
             if (!rows.length) return showNoticeCard('暂无可复制结果');
             if (!copyFieldOrder.length) copyFieldOrder = getDefaultResultFieldOrderFor(copyModalMode, 'txt');
