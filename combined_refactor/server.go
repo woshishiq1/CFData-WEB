@@ -283,6 +283,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if backgroundSession := currentBackgroundTaskSession(); backgroundSession != nil {
 				if session != backgroundSession {
 					backgroundSession.attachWebSocket(ws)
+					session = backgroundSession
 				}
 				backgroundSession.stopTask()
 				return
@@ -304,7 +305,18 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			backgroundSession.attachWebSocket(ws)
-			backgroundSession.sendWSMessage("background_task_following", backgroundSession.backgroundSummary())
+			session = backgroundSession
+			snapshot := backgroundSession.backgroundSummary()
+			backgroundSession.sendWSMessage("background_task_following", snapshot)
+			
+			if !snapshot.Running && snapshot.Phase == "完成" {
+				backgroundSession.nsbMutex.Lock()
+				payload := backgroundSession.nsbCompletePayload
+				backgroundSession.nsbMutex.Unlock()
+				if payload != nil {
+					backgroundSession.sendWSMessage("nsb_csv_complete", *payload)
+				}
+			}
 		},
 		"get_background_task_status": func(data json.RawMessage) {
 			backgroundSession := currentBackgroundTaskSession()
