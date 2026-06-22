@@ -1660,14 +1660,14 @@
                 </div>
                 <div class="option-item">
                     <span class="label">🌐 IP 类型</span>
-                    <select id="ipType">
+                    <select id="officialIpType">
                         <option value="4">IPv4</option>
                         <option value="6">IPv6</option>
                     </select>
                 </div>
                 <div class="option-item">
-                    <span class="label">🚪 端口</span>
-                    <select id="testPort">
+                    <span class="label" title="目标端口，HTTPS 默认 443">🚪 测试端口</span>
+                    <select id="officialTestPort">
                         <optgroup label="HTTPS (默认)">
                             <option value="443" selected>443</option>
                             <option value="2053">2053</option>
@@ -1688,56 +1688,56 @@
                     </select>
                 </div>
                 <div class="option-item">
-                    <span class="label">🚀 并发数</span>
-                    <input id="scanThreads" type="number" value="100" placeholder="默认 100">
+                    <span class="label" title="同时扫描的线程数">🚀 并发数量</span>
+                    <input id="officialThreads" type="number" value="100" placeholder="默认 100">
                 </div>
                 <div class="option-item">
-                    <span class="label">⏱️ 延迟阈值 (ms)</span>
-                    <input id="testDelay" type="number" value="500" placeholder="默认 500">
+                    <span class="label" title="超过此值的连接将被过滤，单位毫秒">⏱️ 扫描合格延迟</span>
+                    <input id="officialDelay" type="number" value="500" placeholder="默认 500ms">
                 </div>
                 <div class="option-item">
-                    <span class="label">📉 测速阈值</span>
+                    <span class="label" title="测速达标下限，单位 MB/s">📉 扫描合格速度</span>
                     <input id="officialSpeedMin" type="number" value="0.1" step="0.01" placeholder="默认 0.1MB/s" oninput="syncOfficialSpeedConfigState()">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏁 测试结果上限</span>
+                    <span class="label" title="测速达标结果的最大数量，关闭测速填 0">🏁 测速结果数量</span>
                     <input id="officialSpeedLimit" type="number" value="5" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
-                    <span class="label">🧪 开启自动测速</span>
+                    <span class="label" title="扫描完成后自动进行详细测试和测速">🧪 自动测速</span>
                     <select id="officialAutoSpeed" onchange="updateOfficialAutoSpeedControls()">
                         <option value="off" selected>关闭</option>
                         <option value="on">开启</option>
                     </select>
                 </div>
                 <div class="option-item">
-                    <span class="label">🏢 数据中心</span>
+                    <span class="label" title="指定数据中心，留空自动选择">🏢 数据中心</span>
                     <input id="officialTargetDC" type="text" value="" placeholder="留空自动选择" disabled>
                 </div>
                 <div class="option-item full-width">
                     <span class="label">📡 扫描方式</span>
                     <div class="field-with-action">
-                        <select id="oScanMode" class="speed-url-select" onchange="updateScanModeHint()">
+                        <select id="officialScanMode" class="speed-url-select" onchange="updateScanModeHint()">
                             <option value="tcping" selected>TCPing（默认）</option>
                             <option value="httping">HTTPing</option>
                         </select>
-                        <input id="oScanModeHint" type="text" value="仅测量 TCP 握手延迟" readonly style="flex:1;min-width:0;">
+                        <input id="officialScanModeHint" type="text" value="仅测量 TCP 握手延迟" readonly style="flex:1;min-width:0;">
                     </div>
                 </div>
                 <div class="option-item full-width">
                     <span class="label">🔗 测速网址</span>
                     <div class="field-with-action">
-                        <select id="officialSpeedUrlPreset" class="speed-url-select" onchange="applySpeedUrlPreset('speedTestUrl', this.value)">
+                        <select id="officialSpeedUrlPreset" class="speed-url-select" onchange="applySpeedUrlPreset('officialSpeedUrl', this.value)">
                             <option value="auto" selected>自动选择</option>
                             <option value="speed.cloudflare.com/__down?bytes=99999999">Cloudflare</option>
                             <option value="cf.090227.xyz/__down?bytes=99999999">CM提供</option>
                             <option value="speed.okl.abrdns.com">移动专属</option>
                             <option value="custom">手动输入</option>
                         </select>
-                        <input id="speedTestUrl" type="text" value="自动选择"
+                        <input id="officialSpeedUrl" type="text" value="自动选择"
                             placeholder="例如 speed.okl.abrdns.com" oninput="markSpeedUrlCustom('officialSpeedUrlPreset')">
                         <button class="mini-action-btn" title="恢复自动选择测速网站"
-                            onclick="resetDefaultSpeedUrl('speedTestUrl', 'officialSpeedUrlPreset')">↺</button>
+                            onclick="resetDefaultSpeedUrl('officialSpeedUrl', 'officialSpeedUrlPreset')">↺</button>
                     </div>
                 </div>
                 <div class="option-item full-width">
@@ -1762,80 +1762,80 @@
                         URL（二选一）；若识别失败，请整理为每行一个目标，格式：IP 空格 端口，例如 1.2.3.4 443</span>
                 </div>
                 <div class="option-item full-width">
-                    <span class="label">📄 选择 IP 文件</span>
-                    <input id="ipFileInput" type="file" accept=".txt,.csv,text/plain,text/csv"
+                    <span class="label" title="支持 txt/csv 格式">📄 IP 文件</span>
+                    <input id="nsbFileInput" type="file" accept=".txt,.csv,text/plain,text/csv"
                         onchange="syncNSBInputMode('file')">
                 </div>
                 <div class="option-item full-width">
-                    <span class="label">🌐 网络 URL</span>
+                    <span class="label" title="从网络地址获取 IP 列表">🌐 网络 URL</span>
                     <input id="nsbSourceUrl" type="url" placeholder="https://example.com/ip-list.txt"
                         oninput="syncNSBInputMode('url')">
                 </div>
                 <div class="option-item">
-                    <span class="label">🚪 备用端口</span>
+                    <span class="label" title="未指定端口时使用的默认端口">🚪 备用端口</span>
                     <input id="nsbFallbackPort" type="number" value="443" placeholder="关闭 TLS 默认 80，开启 TLS 默认 443">
                 </div>
                 <div class="option-item">
-                    <span class="label">🚀 并发数</span>
+                    <span class="label" title="同时扫描的线程数">🚀 并发数量</span>
                     <input id="nsbThreads" type="number" value="100" placeholder="默认 100">
                 </div>
                 <div class="option-item">
-                    <span class="label">⏱️ 延迟阈值 (ms)</span>
-                    <input id="nsbDelay" type="number" value="0" placeholder="默认 0">
+                    <span class="label" title="超过此值的连接将被过滤，单位毫秒">⏱️ 扫描合格延迟</span>
+                    <input id="nsbDelay" type="number" value="0" placeholder="默认 0ms">
                 </div>
                 <div class="option-item">
-                    <span class="label">🎯 结果上限</span>
+                    <span class="label" title="延迟测试通过的结果数量上限">🎯 扫描合格数量</span>
                     <input id="nsbResultLimit" type="number" value="1000" placeholder="非 0 正整数">
                 </div>
                 <div class="option-item">
-                    <span class="label">📉 测速阈值</span>
+                    <span class="label" title="测速达标下限，单位 MB/s">📉 扫描合格速度</span>
                     <input id="nsbSpeedMin" type="number" value="0.1" step="0.01" placeholder="默认 0.1MB/s" oninput="syncNSBSpeedConfigState()">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏁 测试结果上限</span>
+                    <span class="label" title="测速达标结果的最大数量，关闭测速填 0">🏁 测速结果数量</span>
                     <input id="nsbSpeedLimit" type="number" value="5" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
-                    <span class="label">🧪 开启自动测速</span>
-                    <select id="enableSpeedTest" onchange="updateNSBSpeedControls()">
+                    <span class="label" title="扫描完成后自动进行测速">🧪 自动测速</span>
+                    <select id="nsbEnableSpeed" onchange="updateNSBSpeedControls()">
                         <option value="on">开启</option>
                         <option value="off" selected>关闭</option>
                     </select>
                 </div>
                 <div class="option-item">
-                    <span class="label">⚡ 测速线程</span>
+                    <span class="label" title="同时测速的 IP 数量，设为 1 可获得准确速度">⚡ 测速并发</span>
                     <input id="nsbSpeedTest" type="number" value="0" placeholder="0 关闭测速">
                 </div>
                 <div class="option-item">
-                    <span class="label">🏢 数据中心</span>
+                    <span class="label" title="按数据中心筛选结果">🏢 数据中心</span>
                     <input id="nsbTargetDC" type="text" value="" placeholder="留空不限制，如 NRT">
                 </div>
                 <div class="option-item">
-                    <span class="label">🧾 精简表格</span>
+                    <span class="label" title="表格列数精简或完整">🧾 精简表格</span>
                     <select id="nsbCompactView" onchange="setNSBCompactView(this.value === 'compact')">
                         <option value="compact" selected>精简表格</option>
                         <option value="full">完整表格</option>
                     </select>
                 </div>
                 <div class="option-item">
-                    <span class="label">🔗 TLS 模式</span>
+                    <span class="label" title="启用 HTTPS 进行测试">🔗 TLS 模式</span>
                     <select id="nsbTls" onchange="updateNSBFallbackPortDefault()">
                         <option value="on" selected>开启</option>
                         <option value="off">关闭</option>
                     </select>
                 </div>
                 <div class="option-item">
-                    <span class="label">🛠️ 输出文件名</span>
+                    <span class="label" title="CSV 导出文件名">🛠️ 输出文件名</span>
                     <input id="nsbOutFile" type="text" value="ip.csv" placeholder="ip.csv">
                 </div>
                 <div class="option-item full-width">
                     <span class="label">📡 扫描方式</span>
                     <div class="field-with-action">
-                        <select id="nScanMode" class="speed-url-select" onchange="updateScanModeHint()">
+                        <select id="nsbScanMode" class="speed-url-select" onchange="updateScanModeHint()">
                             <option value="tcping" selected>TCPing（默认）</option>
                             <option value="httping">HTTPing</option>
                         </select>
-                        <input id="nScanModeHint" type="text" value="仅测量 TCP 握手延迟" readonly style="flex:1;min-width:0;">
+                        <input id="nsbScanModeHint" type="text" value="仅测量 TCP 握手延迟" readonly style="flex:1;min-width:0;">
                     </div>
                 </div>
                 <div class="option-item full-width">
@@ -2381,10 +2381,10 @@
         const modeNSB = document.getElementById('btnNSB');
         const officialControls = document.getElementById('officialControls');
         const nsbControls = document.getElementById('nsbControls');
-        const fileInput = document.getElementById('ipFileInput');
+        const fileInput = document.getElementById('nsbFileInput');
         const nsbSourceUrlInput = document.getElementById('nsbSourceUrl');
 
-        document.getElementById('ipFileInput').addEventListener('change', e => {
+        document.getElementById('nsbFileInput').addEventListener('change', e => {
             const file = e.target.files[0];
             if (!file) {
                 uploadedFileName = '';
@@ -2493,7 +2493,7 @@
         }
 
         function updateNSBSpeedControls() {
-            const enableSpeedTest = document.getElementById('enableSpeedTest');
+            const enableSpeedTest = document.getElementById('nsbEnableSpeed');
             const speedTestInput = document.getElementById('nsbSpeedTest');
             if (!enableSpeedTest || !speedTestInput) return;
 
@@ -2572,7 +2572,7 @@
             input.readOnly = false;
         }
 
-        function resetDefaultSpeedUrl(targetId = 'speedTestUrl', presetId = '') {
+        function resetDefaultSpeedUrl(targetId = 'officialSpeedUrl', presetId = '') {
             const input = document.getElementById(targetId);
             if (!input) return;
             input.value = AUTO_SPEED_URL_LABEL;
@@ -2915,19 +2915,19 @@
 
         function getScanMode() {
             if (currentMode === 'official') {
-                const el = document.getElementById('oScanMode');
+                const el = document.getElementById('officialScanMode');
                 return el ? el.value : 'tcping';
             }
-            const el = document.getElementById('nScanMode');
+            const el = document.getElementById('nsbScanMode');
             return el ? el.value : 'tcping';
         }
 
         function getScanModeHint() {
             if (currentMode === 'official') {
-                const el = document.getElementById('oScanModeHint');
+                const el = document.getElementById('officialScanModeHint');
                 return el || null;
             }
-            const el = document.getElementById('nScanModeHint');
+            const el = document.getElementById('nsbScanModeHint');
             return el || null;
         }
 
@@ -3249,10 +3249,10 @@
                 if (el === null || el === undefined || value === undefined || value === null || value === '') return;
                 el.value = value;
             };
-            setValue('ipType', params.ipType);
-            setValue('scanThreads', params.threads || params.maxThreads);
-            setValue('testPort', params.port);
-            setValue('testDelay', params.delay);
+            setValue('officialIpType', params.ipType);
+            setValue('officialThreads', params.threads || params.maxThreads);
+            setValue('officialTestPort', params.port);
+            setValue('officialDelay', params.delay);
             setValue('officialSpeedLimit', params.speedLimit);
             setValue('officialSpeedMin', params.speedMin);
             setValue('officialTargetDC', params.dc);
@@ -3963,8 +3963,8 @@
         function selectDC(dc) {
             if (requireProxyWarning(() => selectDC(dc))) return;
             if (isTaskRunning && currentTestingDC !== '') return;
-            const port = parseInt(document.getElementById('testPort').value);
-            const delay = parseInt(document.getElementById('testDelay').value) || 500;
+            const port = parseInt(document.getElementById('officialTestPort').value);
+            const delay = parseInt(document.getElementById('officialDelay').value) || 500;
 
             testResultsCount = 0;
             autoUploadKeys = new Set();
@@ -3996,7 +3996,7 @@
         }
 
         function renderTestRow(res) {
-            const port = res.Port || parseInt(document.getElementById('testPort').value) || 443;
+            const port = res.Port || parseInt(document.getElementById('officialTestPort').value) || 443;
             const meta = testResultToObject(res);
             const speedText = res.Speed || '未测速';
             const speedStatus = getSpeedStatus(speedText, isOfficialSpeedQualified(speedText));
@@ -4069,8 +4069,8 @@
             const speedVal = document.getElementById(`speed-val-${ip.replace(/[:.]/g, '_')}`);
             if (speedVal) speedVal.textContent = '⏳...';
             currentSpeedTestingIP = ip;
-            const port = parseInt(document.getElementById('testPort').value);
-            const customUrl = resolveSpeedTestUrl('speedTestUrl', 'officialSpeedUrlPreset');
+            const port = parseInt(document.getElementById('officialTestPort').value);
+            const customUrl = resolveSpeedTestUrl('officialSpeedUrl', 'officialSpeedUrlPreset');
             if (!wsSend({ type: 'start_speed_test', data: { ip, port, url: customUrl } })) {
                 if (speedVal) speedVal.textContent = '连接未就绪';
                 if (btn) {
@@ -4084,11 +4084,11 @@
         function getLatencyColorFactor() {
             if (getScanMode() !== 'httping') return 1;
             if (currentMode === 'official') {
-                const port = parseInt(document.getElementById('testPort')?.value) || 443;
-                return [443, 2053, 2083, 2087, 2096, 8443].includes(port) ? 2.5 : 1.3;
+                const port = parseInt(document.getElementById('officialTestPort')?.value) || 443;
+                return [443, 2053, 2083, 2087, 2096, 8443].includes(port) ? 4.0 : 1.3;
             }
             const tls = String(document.getElementById('nsbTls')?.value || 'on').toLowerCase();
-            return tls !== 'off' ? 2.5 : 1.3;
+            return tls !== 'off' ? 4.0 : 1.3;
         }
 
         function getLatencyColor(val, factor) {
@@ -4127,8 +4127,8 @@
         }
 
         function getOfficialSpeedConfig() {
-            const port = parseInt(document.getElementById('testPort')?.value || '443', 10) || 443;
-            const url = resolveSpeedTestUrl('speedTestUrl', 'officialSpeedUrlPreset');
+            const port = parseInt(document.getElementById('officialTestPort')?.value || '443', 10) || 443;
+            const url = resolveSpeedTestUrl('officialSpeedUrl', 'officialSpeedUrlPreset');
             const speedMin = parseFloat(document.getElementById('officialSpeedMin')?.value || '0.1') || 0.1;
             const speedLimit = parseInt(document.getElementById('officialSpeedLimit')?.value || '0', 10) || 0;
             return { port, url, speedMin, speedLimit, results: testData.slice() };
@@ -4198,7 +4198,7 @@
                 showNoticeCard('请切换到非标模式后再测速');
                 return false;
             }
-            const enableSpeedTest = document.getElementById('enableSpeedTest');
+            const enableSpeedTest = document.getElementById('nsbEnableSpeed');
             if (enableSpeedTest && String(enableSpeedTest.value || 'off').toLowerCase() !== 'on') {
                 enableSpeedTest.value = 'on';
                 updateNSBSpeedControls();
@@ -4336,10 +4336,10 @@
         }
 
         function startOfficialTask() {
-            const ipType = parseInt(document.getElementById('ipType').value);
-            const threads = parseInt(document.getElementById('scanThreads').value) || 100;
-            const port = parseInt(document.getElementById('testPort').value) || 443;
-            const delay = parseInt(document.getElementById('testDelay').value) || 0;
+            const ipType = parseInt(document.getElementById('officialIpType').value);
+            const threads = parseInt(document.getElementById('officialThreads').value) || 100;
+            const port = parseInt(document.getElementById('officialTestPort').value) || 443;
+            const delay = parseInt(document.getElementById('officialDelay').value) || 0;
             const officialSpeedConfig = syncOfficialSpeedConfigState();
             const autoSpeed = String(document.getElementById('officialAutoSpeed')?.value || 'off').toLowerCase() === 'on';
             officialSpeedEnabledForResults = autoSpeed && officialSpeedConfig.speedLimit > 0;
@@ -4425,7 +4425,7 @@
 
             const maxThreads = parseInt(document.getElementById('nsbThreads').value) || 100;
             const fallbackPort = parseInt(document.getElementById('nsbFallbackPort').value) || 0;
-            const speedEnabled = String(document.getElementById('enableSpeedTest').value || 'off').toLowerCase() === 'on';
+            const speedEnabled = String(document.getElementById('nsbEnableSpeed').value || 'off').toLowerCase() === 'on';
             const speedTestInput = parseInt(document.getElementById('nsbSpeedTest').value) || 0;
             const speedURL = resolveSpeedTestUrl('nsbSpeedUrl', 'nsbSpeedUrlPreset');
             const outFile = document.getElementById('nsbOutFile').value.trim() || 'ip.csv';
@@ -5223,7 +5223,7 @@
         }
 
         function testResultToObject(r) {
-            const port = r.Port || parseInt(document.getElementById('testPort').value) || 443;
+            const port = r.Port || parseInt(document.getElementById('officialTestPort').value) || 443;
             const scan = scanData.find((item) => item.IP === r.IP) || {};
             return {
                 ip: r.IP || '',
@@ -5501,7 +5501,7 @@
                     if (proxyWarningRequired) log(`代理检测警告：当前网络标签 ${cfCountry}`);
                     const speedDefault = msg.data.speedTestDefault || msg.data.speedTestURL || AUTO_SPEED_URL_VALUE;
                     defaultSpeedTestUrl = speedDefault || defaultSpeedTestUrl;
-                    applySpeedUrlConfig('speedTestUrl', 'officialSpeedUrlPreset', speedDefault);
+                    applySpeedUrlConfig('officialSpeedUrl', 'officialSpeedUrlPreset', speedDefault);
                     applySpeedUrlConfig('nsbSpeedUrl', 'nsbSpeedUrlPreset', speedDefault);
                     renderVersionInfo(msg.data || {});
                     break;
