@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -391,6 +393,20 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		},
 		"reset_all_config": func(data json.RawMessage) {
 			resetAllConfigFiles(session)
+		},
+		"get_config": func(data json.RawMessage) {
+			cfgPath := filepath.Join(filepath.Dir(os.Args[0]), "cfdata-config.json")
+			raw, err := os.ReadFile(cfgPath)
+			if err != nil {
+				session.sendWSMessage("error", "读取配置文件失败: "+err.Error())
+				return
+			}
+			var parsed interface{}
+			if err := json.Unmarshal(raw, &parsed); err != nil {
+				session.sendWSMessage("error", "解析配置文件失败: "+err.Error())
+				return
+			}
+			session.sendWSMessage("config_data", parsed)
 		},
 		"check_proxy_country": func(data json.RawMessage) {
 			if skipGeoCheck {

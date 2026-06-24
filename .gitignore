@@ -30,6 +30,7 @@ cfdata-*
 combined_refactor/cfdata
 combined_refactor/cfdata-*
 cfdata-config.json
+AGENTS.md
 ips-v4.txt
 ips-v6.txt
 locations.json

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -196,6 +197,14 @@ func main() {
 	}
 	webSessionTTL = time.Duration(webSessionMinutes) * time.Minute
 
+	if !cliCfg.enabled {
+		cfgPath := filepath.Join(filepath.Dir(os.Args[0]), "cfdata-config.json")
+		if _, created, err := loadOrCreateCLIConfig(cfgPath); err != nil && !errors.Is(err, errCLIConfigCreated) {
+			fmt.Printf("[config] 加载配置文件失败: %v\n", err)
+		} else if created {
+			fmt.Printf("[config] 已生成配置文件模板: %s\n", cfgPath)
+		}
+	}
 	initLocations()
 	if cliCfg.enabled {
 		if err := runCLI(cliCfg); err != nil {
