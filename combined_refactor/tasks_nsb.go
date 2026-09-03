@@ -664,19 +664,12 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 			}
 			continue
 		}
-		isDomain := strings.ContainsFunc(host, func(r rune) bool {
-			return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
-		}) || (len(resolvedIPs) == 1 && resolvedIPs[0] != host)
 		for _, ip := range resolvedIPs {
-			originalInput := ""
-			if isDomain {
-				originalInput = host
-			}
 			expandedEntries = append(expandedEntries, struct {
 				ip            string
 				port          int
 				originalInput string
-			}{ip, port, originalInput})
+			}{ip, port, host})
 		}
 	}
 
@@ -1142,9 +1135,9 @@ func nsbCSVRows(results []iptestResult, includeSpeed bool, compact bool, scanMod
 
 func nsbCSVHeaders(compact bool, scanMode string) []string {
 	if compact {
-		return []string{"IP地址", "OriginalInput", "端口号", "TLS", "丢包率", "扫描方式", "网络延迟", "下载速度", "出站IP", "IP类型", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
+		return []string{"IP地址", "端口号", "TLS", "丢包率", "扫描方式", "网络延迟", "下载速度", "出站IP", "IP类型", "原始输入", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
 	}
-	headers := []string{"IP地址", "OriginalInput", "端口号", "TLS", "丢包率", "扫描方式", "网络延迟", "下载速度", "出站IP", "IP类型", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
+	headers := []string{"IP地址", "端口号", "TLS", "丢包率", "扫描方式", "网络延迟", "下载速度", "出站IP", "IP类型", "原始输入", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
 	headers = append(headers, "访问协议", "TLS版本", "SNI", "HTTP版本", "WARP", "Gateway", "RBI", "密钥交换", "时间戳")
 	return headers
 }
@@ -1164,7 +1157,6 @@ func nsbCSVRow(res iptestResult, includeSpeed bool, compact bool, scanMode strin
 	if compact {
 		return []string{
 			res.ipAddr,
-			res.originalInput,
 			strconv.Itoa(res.port),
 			strconv.FormatBool(res.visitScheme == "https"),
 			fmt.Sprintf("%.0f%%", res.lossRate*100),
@@ -1173,6 +1165,7 @@ func nsbCSVRow(res iptestResult, includeSpeed bool, compact bool, scanMode strin
 			speed,
 			res.outboundIP,
 			res.ipType,
+			res.originalInput,
 			res.dataCenter,
 			res.locCode,
 			res.region,
@@ -1183,7 +1176,6 @@ func nsbCSVRow(res iptestResult, includeSpeed bool, compact bool, scanMode strin
 	}
 	row := []string{
 		res.ipAddr,
-		res.originalInput,
 		strconv.Itoa(res.port),
 		strconv.FormatBool(res.visitScheme == "https"),
 		fmt.Sprintf("%.0f%%", res.lossRate*100),
@@ -1192,6 +1184,7 @@ func nsbCSVRow(res iptestResult, includeSpeed bool, compact bool, scanMode strin
 		speed,
 		res.outboundIP,
 		res.ipType,
+		res.originalInput,
 		res.dataCenter,
 		res.locCode,
 		res.region,
