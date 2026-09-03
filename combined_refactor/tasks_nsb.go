@@ -29,17 +29,53 @@ func resolveHostToIPs(ctx context.Context, host string, maxIPs int) ([]string, e
 	if addr, err := netip.ParseAddr(host); err == nil {
 		return []string{addr.String()}, nil
 	}
-	var resolver *net.Resolver
 	if customResolver != nil && customDNSForced {
-		resolver = customResolver
-	} else {
-		resolver = net.DefaultResolver
+		ips, err := customResolver.LookupIP(ctx, "ip", host)
+		if err != nil {
+			return nil, fmt.Errorf("域名解析失败 %s: %w", host, err)
+		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("域名 %s 未解析到任何 IP 地址", host)
+		}
+		limit := len(ips)
+		if maxIPs > 0 && limit > maxIPs {
+			limit = maxIPs
+		}
+		result := make([]string, 0, limit)
+		for i := 0; i < limit; i++ {
+			result = append(result, ips[i].String())
+		}
+		return result, nil
 	}
-	ips, err := resolver.LookupIP(ctx, "ip", host)
-	if err != nil {
-		return nil, fmt.Errorf("域名解析失败 %s: %w", host, err)
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+	if err == nil && len(ips) > 0 {
+		limit := len(ips)
+		if maxIPs > 0 && limit > maxIPs {
+			limit = maxIPs
+		}
+		result := make([]string, 0, limit)
+		for i := 0; i < limit; i++ {
+			result = append(result, ips[i].String())
+		}
+		return result, nil
+	}
+	if customResolver == nil {
+		if err != nil {
+			return nil, fmt.Errorf("域名解析失败 %s: %w", host, err)
+		}
+		return nil, fmt.Errorf("域名 %s 未解析到任何 IP 地址", host)
+	}
+	ips, fallbackErr := customResolver.LookupIP(ctx, "ip", host)
+	if fallbackErr != nil {
+		if err != nil {
+			return nil, fmt.Errorf("域名解析失败 %s: %w", host, err)
+		}
+		return nil, fmt.Errorf("域名解析失败 %s: %w", host, fallbackErr)
 	}
 	if len(ips) == 0 {
+		if err != nil {
+			return nil, fmt.Errorf("域名 %s 未解析到任何 IP 地址", host)
+		}
 		return nil, fmt.Errorf("域名 %s 未解析到任何 IP 地址", host)
 	}
 	limit := len(ips)
@@ -940,28 +976,29 @@ func nsbMessageToResult(row nsbScanMessage) (iptestResult, bool) {
 		return iptestResult{}, false
 	}
 	return iptestResult{
-		ipAddr:      strings.TrimSpace(row.IP),
-		port:        port,
-		dataCenter:  row.DC,
-		locCode:     row.Loc,
-		region:      row.Region,
-		city:        row.City,
-		latency:     row.Latency,
-		lossRate:    parsePercent(row.LossRate),
-		outboundIP:  row.OutboundIP,
-		ipType:      row.IPType,
-		asnNumber:   row.ASNNumber,
-		asnOrg:      row.ASNOrg,
-		visitScheme: firstNonEmpty(row.VisitScheme, mapBoolTLS(row.TLS)),
-		tlsVersion:  row.TLSVersion,
-		sni:         row.SNI,
-		httpVersion: row.HTTPVersion,
-		warp:        row.Warp,
-		gateway:     row.Gateway,
-		rbi:         row.RBI,
-		kex:         row.Kex,
-		timestamp:   row.Timestamp,
-		speedText:   row.Speed,
+		ipAddr:       strings.TrimSpace(row.IP),
+		port:         port,
+		dataCenter:   row.DC,
+		locCode:      row.Loc,
+		region:       row.Region,
+		city:         row.City,
+		latency:      row.Latency,
+		lossRate:     parsePercent(row.LossRate),
+		outboundIP:   row.OutboundIP,
+		ipType:       row.IPType,
+		asnNumber:    row.ASNNumber,
+		asnOrg:       row.ASNOrg,
+		visitScheme:  firstNonEmpty(row.VisitScheme, mapBoolTLS(row.TLS)),
+		tlsVersion:   row.TLSVersion,
+		sni:          row.SNI,
+		httpVersion:  row.HTTPVersion,
+		warp:         row.Warp,
+		gateway:      row.Gateway,
+		rbi:          row.RBI,
+		kex:          row.Kex,
+		timestamp:    row.Timestamp,
+		speedText:    row.Speed,
+		originalInput: row.OriginalInput,
 	}, true
 }
 
