@@ -642,7 +642,7 @@ done:
 func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent, outFile string, maxThreads, fallbackPort, speedTest int, speedURL string, enableTLS bool, delay int, resultLimit int, targetDC string, speedMin float64, speedLimit int, compact bool, scanMode string) {
 	session.sendWSMessage("log", fmt.Sprintf("开始非标优选：%s", fileName))
 
-	tmpFile, err := os.CreateTemp("", "cfdata-nsb-*.txt")
+	tmpFile, err := os.CreateTemp(".", "cfdata-nsb-*.txt")
 	if err != nil {
 		session.sendWSMessage("error", "无法创建临时文件: "+err.Error())
 		return

@@ -670,6 +670,10 @@ func edgetunnelLogin(ctx context.Context, host, password string) (*http.Cookie, 
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("登录失败 %s: %s", resp.Status, strings.TrimSpace(string(data)))
 	}
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "text/html") {
+		return nil, fmt.Errorf("密码错误")
+	}
 	cookies := resp.Cookies()
 	for _, c := range cookies {
 		if c.Name != "" {
